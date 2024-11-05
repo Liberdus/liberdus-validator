@@ -61,7 +61,7 @@ dapp.setup({
        * fixed to check timestamps properly
        */
         // const when = Date.now() + configs.ONE_SECOND * 10
-      const when = Date.now()
+      const when = dapp.shardusGetTime()
       const existingNetworkAccount = await dapp.getLocalOrRemoteAccount(configs.networkAccount)
       if (existingNetworkAccount) {
         dapp.log('NETWORK_ACCOUNT ALREADY EXISTED: ', existingNetworkAccount)
@@ -750,7 +750,7 @@ dapp.registerExceptionHandler()
   let cycleData: ShardusTypes.Cycle
   let currentTime: number
   let luckyNodes: string[]
-  let expected = Date.now() + cycleInterval
+  let expected = dapp.shardusGetTime() + cycleInterval
   let drift: number
 
   await dapp.start()
@@ -758,8 +758,8 @@ dapp.registerExceptionHandler()
   // THIS CODE IS CALLED ON EVERY NODE ON EVERY CYCLE
   async function networkMaintenance(): Promise<NodeJS.Timeout> {
     dapp.log('New maintenance cycle has started')
-    drift = Date.now() - expected
-    currentTime = Date.now()
+    drift = dapp.shardusGetTime() - expected
+    currentTime = dapp.shardusGetTime()
 
     try {
       const account = await dapp.getLocalOrRemoteAccount(configs.networkAccount)
@@ -969,7 +969,7 @@ dapp.registerExceptionHandler()
       if (dapp.p2p.isFirstSeed) {
         await utils._sleep(configs.ONE_SECOND * configs.cycleDuration * 2)
       }
-      const currentTime = Date.now()
+      const currentTime = dapp.shardusGetTime()
       let currentCycle: ShardusTypes.Cycle
       ;[currentCycle] = dapp.getLatestCycles()
       let currentCycleStartMs = currentCycle.start * 1000
@@ -981,7 +981,7 @@ dapp.registerExceptionHandler()
         // or wait till next cycle end
         waitTime = currentCycleStartMs + 2*cycleInterval - currentTime
       }
-      lastReward = Date.now()
+      lastReward = dapp.shardusGetTime()
       return setTimeout(networkMaintenance, waitTime)
     },
   )

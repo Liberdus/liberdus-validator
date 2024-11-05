@@ -103,7 +103,7 @@ export function nodeReward(address: string, nodeId: string, dapp: Shardus): void
     nodeId: nodeId,
     from: address,
     to: process.env.PAY_ADDRESS || address,
-    timestamp: Date.now(),
+    timestamp: dapp.shardusGetTime(),
   }
   dapp.put(tx)
   dapp.log('GENERATED_NODE_REWARD: ', nodeId)
@@ -117,7 +117,7 @@ export async function startNetworkWindows(address: string, nodeId: string, dapp:
     type: TXTypes.network_windows,
     nodeId,
     from: address,
-    timestamp: Date.now(),
+    timestamp: dapp.shardusGetTime(),
   }
   const resp = await dapp.put(tx,  set)
   dapp.log('start network windows tx', tx, resp)
@@ -133,7 +133,7 @@ export async function generateIssue(address: string, nodeId: string, dapp: Shard
     from: address,
     issue: calculateIssueId(network.issue),
     proposal: crypto.hash(`issue-${network.issue}-proposal-1`),
-    timestamp: Date.now(),
+    timestamp: dapp.shardusGetTime(),
   }
   dapp.put(tx,  set)
   dapp.log('GENERATED_ISSUE: ', nodeId, tx)
@@ -148,7 +148,7 @@ export async function generateDevIssue(address: string, nodeId: string, dapp: Sh
     nodeId,
     from: address,
     devIssue: calculateDevIssueId(network.devIssue),
-    timestamp: Date.now(),
+    timestamp: dapp.shardusGetTime(),
   }
   dapp.put(tx,  set)
   dapp.log('GENERATED_DEV_ISSUE: ', nodeId, tx)
@@ -173,7 +173,7 @@ export async function tallyVotes(address: string, nodeId: string, dapp: Shardus,
       from: address,
       issue: issue.id,
       proposals: issue.proposals,
-      timestamp: Date.now(),
+      timestamp: dapp.shardusGetTime(),
     }
     // todo: why is this not signed by the node?
     dapp.put(tx,  set)
@@ -202,7 +202,7 @@ export async function tallyDevVotes(address: string, nodeId: string, dapp: Shard
       from: address,
       devIssue: devIssue.id,
       devProposals: devIssue.devProposals,
-      timestamp: Date.now(),
+      timestamp: dapp.shardusGetTime(),
     }
     dapp.put(tx,  set)
     dapp.log('GENERATED_DEV_TALLY: ', nodeId, tx)
@@ -222,7 +222,7 @@ export async function injectParameterTx(address: string, nodeId: string, dapp: S
     nodeId,
     from: address,
     issue: crypto.hash(`issue-${network.issue}`),
-    timestamp: Date.now(),
+    timestamp: dapp.shardusGetTime(),
   }
   const response = await dapp.put(tx)
   dapp.log('GENERATED_PARAMETER: ', nodeId, tx, response)
@@ -237,7 +237,7 @@ export async function injectDevParameters(address: string, nodeId: string, dapp:
     nodeId,
     from: address,
     devIssue: crypto.hash(`dev-issue-${network.devIssue}`),
-    timestamp: Date.now(),
+    timestamp: dapp.shardusGetTime(),
   }
   dapp.put(tx,  set)
   dapp.log('GENERATED_DEV_PARAMETER: ', nodeId, tx)
@@ -252,7 +252,7 @@ export async function applyParameters(address: string, nodeId: string, dapp: Sha
     nodeId,
     from: address,
     issue: crypto.hash(`issue-${network.issue}`),
-    timestamp: Date.now(),
+    timestamp: dapp.shardusGetTime(),
   }
   dapp.put(tx,  set)
   dapp.log('GENERATED_APPLY: ', nodeId, tx)
@@ -267,7 +267,7 @@ export async function applyDevParameters(address: string, nodeId: string, dapp: 
     nodeId,
     from: address,
     devIssue: crypto.hash(`dev-issue-${network.devIssue}`),
-    timestamp: Date.now(),
+    timestamp: dapp.shardusGetTime(),
   }
   dapp.put(tx)
   dapp.log('GENERATED_DEV_APPLY: ', nodeId, tx)
@@ -281,7 +281,7 @@ export function releaseDeveloperFunds(payment: DeveloperPayment, address: string
     from: address,
     developer: payment.address,
     payment: payment,
-    timestamp: Date.now(),
+    timestamp: dapp.shardusGetTime(),
   }
   dapp.put(tx,  set)
   dapp.log('GENERATED_DEV_PAYMENT: ', nodeId)
