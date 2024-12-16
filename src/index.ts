@@ -1,4 +1,5 @@
 import { shardusFactory, ShardusTypes, nestedCountersInstance, DevSecurityLevel } from '@shardus/core'
+import account from "./accounts"
 import { P2P, Utils } from '@shardus/types'
 import * as crypto from './crypto'
 import * as configs from './config'
@@ -23,6 +24,8 @@ import { configShardusNetworkTransactions } from './transactions/networkTransact
 import { readOperatorVersions, operatorCLIVersion, operatorGUIVersion } from './utils/versions'
 import { toShardusAddress } from './utils/address'
 import { onActiveVersionChange } from './versioning/index'
+import genesis from './config/genesis.json'
+
 const { version } = require('./../package.json')
 
 dotenv.config()
@@ -108,6 +111,8 @@ dapp.setup({
       // const when = Date.now() + configs.ONE_SECOND * 10
       const when = Date.now()
       const existingNetworkAccount = await getLocalOrRemoteAccount(configs.networkAccount)
+
+
       if (existingNetworkAccount) {
         dapp.log('NETWORK_ACCOUNT ALREADY EXISTED: ', existingNetworkAccount)
         await utils._sleep(configs.ONE_SECOND * 5)
@@ -125,6 +130,73 @@ dapp.setup({
 
         dapp.log(`node ${nodeId} GENERATED_A_NEW_NETWORK_ACCOUNT: `)
         await utils._sleep(configs.ONE_SECOND * 10)
+
+        /* Genesis account */
+
+        type GenesisBalances = {
+          [address: string]: {
+            alias: string
+            publicKey: string
+            balance: string
+          }
+        }
+
+        const genesisLoaded = genesis as GenesisBalances;
+        let accountCopies: ShardusTypes.AccountsCopy[] = []
+
+        for (let address in genesisLoaded) {
+          const accountId = toShardusAddress(address)
+
+          if (await getLocalOrRemoteAccount(accountId)) {
+            continue
+          }
+
+          const currentCycle = dapp.getLatestCycles(1)[0]
+          let userAccount = account.userAccount(accountId, currentCycle.start)
+
+          userAccount.alias = genesisLoaded[address].alias
+          userAccount.publicKey = genesisLoaded[address].publicKey
+          userAccount.timestamp = currentCycle.start
+          userAccount.data.balance = BigInt(genesisLoaded[address].balance)
+          userAccount.hash = ''
+          userAccount.hash = crypto.hashObj(userAccount)
+
+          let constructedShardusAccount = {
+            accountId: accountId,
+            cycleNumber: currentCycle.counter,
+            data: userAccount,
+            timestamp: currentCycle.start,
+            isGlobal: false,
+            hash: userAccount.hash,
+          }
+
+          accountCopies.push(constructedShardusAccount)
+
+
+          let aliasAccount = account.aliasAccount(crypto.hash(genesisLoaded[address].alias))
+          aliasAccount.address = userAccount.id
+          aliasAccount.timestamp = currentCycle.start
+          aliasAccount.hash = ''
+          aliasAccount.hash = crypto.hashObj(aliasAccount)
+
+          accountCopies.push({
+            accountId: crypto.hash(genesisLoaded[address].alias),
+            cycleNumber: currentCycle.counter,
+            data: aliasAccount,
+            timestamp: currentCycle.start,
+            isGlobal: false,
+            hash: aliasAccount.hash,
+          })
+
+
+        }
+
+        accountCopies = accountCopies.map(acc => {
+          return Utils.safeJsonParse(Utils.safeStringify(acc))
+        })
+
+        await dapp.debugCommitAccountCopies(accountCopies)
+        await dapp.forwardAccounts({ accounts: accountCopies, receipts: []})
 
         // WE SHOULD NOT DO THIS WHILE THE NETWORK IS FORMING
         // dapp.set({
