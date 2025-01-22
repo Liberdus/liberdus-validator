@@ -1,8 +1,11 @@
 import { Shardus, ShardusTypes } from '@shardus/core'
+import * as LiberdusTypes from '../@types'
 import * as config from '../config'
+import * as utils from '../utils'
 import { UserAccount, NetworkAccount, WrappedStates, OurAppDefinedData, Tx, TransactionKeys } from '../@types'
 import { TXTypes } from '.'
 import { Utils } from '@shardus/types'
+import { toShardusAddress } from '../utils/address'
 
 export const validate_fields = (tx: Tx.ChangeConfig, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.from !== 'string') {
@@ -107,3 +110,27 @@ export const createRelevantAccount = (dapp: Shardus, account: UserAccount, accou
   }
   return dapp.createWrappedResponse(accountId, accountCreated, account.hash, account.timestamp, account)
 }
+
+export const collectWrappedStates = async (tx: Tx.ChangeConfig, dapp: Shardus): Promise<WrappedStates> => {
+  const promises = []
+  const accounts = [config.networkAccount]
+  const wrappedStates: WrappedStates = {}
+  const txTimestamp = utils.getInjectedOrGeneratedTimestamp({ tx: tx }, dapp)
+
+  for (const accountId of accounts) {
+    const shardusId = toShardusAddress(accountId)
+    promises.push(dapp.getLocalOrRemoteAccount(shardusId).then((queuedWrappedState)=>{
+      wrappedStates[shardusId] = {
+        accountId: queuedWrappedState.accountId,
+        stateId: queuedWrappedState.stateId,
+        data: queuedWrappedState.data as LiberdusTypes.Accounts,
+        timestamp: txTimestamp,
+      }
+    }))
+  }
+
+  await Promise.allSettled(promises)
+  return wrappedStates 
+}
+
+

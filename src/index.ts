@@ -774,64 +774,17 @@ dapp.setup({
     return false
   },
   async txPreCrackData(tx: any, appData: any): Promise<{ status: boolean; reason: string }> {
-    if (tx.type != TXTypes.transfer && tx.type != TXTypes.message && tx.type != TXTypes.deposit_stake) {
+    if (
+      tx.type != TXTypes.transfer && 
+      tx.type != TXTypes.message && 
+      tx.type != TXTypes.deposit_stake &&
+      tx.type != TXTypes.change_config 
+    ) {
       return { status: true, reason: 'Tx PreCrack Skipped' }
     }
     console.log('txPreCrackData', tx)
     try {
-      const txTimestamp = utils.getInjectedOrGeneratedTimestamp({ tx: tx }, dapp)
-      let wrappedStates: LiberdusTypes.WrappedStates = {}
-      let promises = []
-      let sourceKeyShardusAddr = null
-      let targetKeyShardusAddr = null
-
-      let from = tx.from
-      let to = tx.to
-
-      if (tx.type === TXTypes.deposit_stake) {
-        from = tx.nominator
-        to = tx.nominee
-      }
-
-      if (from) {
-        sourceKeyShardusAddr = toShardusAddress(from)
-        promises.push(
-          dapp.getLocalOrRemoteAccount(sourceKeyShardusAddr).then((queuedWrappedState) => {
-            wrappedStates[from] = {
-              accountId: queuedWrappedState.accountId,
-              stateId: queuedWrappedState.stateId,
-              data: queuedWrappedState.data as LiberdusTypes.Accounts,
-              timestamp: txTimestamp,
-            }
-          }),
-        )
-      }
-      if (to) {
-        targetKeyShardusAddr = toShardusAddress(to)
-        promises.push(
-          dapp.getLocalOrRemoteAccount(targetKeyShardusAddr).then((queuedWrappedState) => {
-            wrappedStates[to] = {
-              accountId: queuedWrappedState.accountId,
-              stateId: queuedWrappedState.stateId,
-              data: queuedWrappedState.data as LiberdusTypes.Accounts,
-              timestamp: txTimestamp,
-            }
-          }),
-        )
-      }
-
-      promises.push(
-        dapp.getLocalOrRemoteAccount(networkAccount).then((queuedWrappedState) => {
-          wrappedStates[networkAccount] = {
-            accountId: queuedWrappedState.accountId,
-            stateId: queuedWrappedState.stateId,
-            data: queuedWrappedState.data as LiberdusTypes.Accounts,
-            timestamp: txTimestamp,
-          }
-        }),
-      )
-
-      await Promise.allSettled(promises)
+      const wrappedStates = await transactions[tx.type].collectWrappedStates(tx, dapp);
 
       const res = transactions[tx.type].validate(tx, wrappedStates, { success: false, reason: 'Tx Validation Fails' }, dapp)
       if (res.success === false) {

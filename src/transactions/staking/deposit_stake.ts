@@ -1,10 +1,12 @@
 import * as crypto from '../../crypto'
 import { Shardus, ShardusTypes } from '@shardus/core'
+import * as LiberdusTypes from '../../@types'
 import * as utils from './../../utils'
 import * as config from './../../config'
 import * as AccountsStorage from '../../storage/accountStorage'
 import create from './../../accounts'
 import { UserAccount, WrappedStates, Tx, TransactionKeys, NodeAccount, Accounts } from './../../@types'
+import { toShardusAddress } from '../../utils/address'
 
 export const validate_fields = (tx: Tx.DepositStake, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.nominator !== 'string' && utils.isValidAddress(tx.nominator) === false) {
@@ -153,3 +155,28 @@ export const createRelevantAccount = (dapp: Shardus, account: UserAccount | Node
   }
   return dapp.createWrappedResponse(accountId, accountCreated, account.hash, account.timestamp, account)
 }
+
+
+export const collectWrappedStates = async (tx: Tx.DepositStake, dapp: Shardus): Promise<WrappedStates> => {
+  const promises = []
+  const accounts = [tx.nominee, tx.nominator]
+  const wrappedStates: WrappedStates = {}
+  const txTimestamp = utils.getInjectedOrGeneratedTimestamp({ tx: tx }, dapp)
+
+  for (const accountId of accounts) {
+    const shardusId = toShardusAddress(accountId)
+    promises.push(dapp.getLocalOrRemoteAccount(shardusId).then((queuedWrappedState)=>{
+      wrappedStates[shardusId] = {
+        accountId: queuedWrappedState.accountId,
+        stateId: queuedWrappedState.stateId,
+        data: queuedWrappedState.data as LiberdusTypes.Accounts,
+        timestamp: txTimestamp,
+      }
+    }))
+  }
+
+  await Promise.allSettled(promises)
+  return wrappedStates 
+}
+
+

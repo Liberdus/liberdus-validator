@@ -1,4 +1,5 @@
 import * as crypto from '../crypto'
+import * as LiberdusTypes from '../@types'
 import { Shardus, ShardusTypes } from '@shardus/core'
 import * as utils from '../utils'
 import create from '../accounts'
@@ -145,3 +146,29 @@ export const createRelevantAccount = (dapp: Shardus, account: UserAccount | Chat
   }
   return dapp.createWrappedResponse(accountId, accountCreated, account.hash, account.timestamp, account)
 }
+
+export const collectWrappedStates = async (tx: Tx.Message, dapp: Shardus): Promise<WrappedStates> => {
+  const promises = []
+  const accounts = [tx.from, tx.to, config.networkAccount]
+  const wrappedStates: WrappedStates = {}
+  const txTimestamp = utils.getInjectedOrGeneratedTimestamp({ tx: tx }, dapp)
+
+  for (const accountId of accounts) {
+    const shardusId = toShardusAddress(accountId)
+    promises.push(
+      dapp.getLocalOrRemoteAccount(shardusId).then((queuedWrappedState)=>{
+        wrappedStates[shardusId] = {
+          accountId: queuedWrappedState.accountId,
+          stateId: queuedWrappedState.stateId,
+          data: queuedWrappedState.data as LiberdusTypes.Accounts,
+          timestamp: txTimestamp,
+        }
+      })
+    )
+  }
+
+  await Promise.allSettled(promises)
+  return wrappedStates 
+}
+
+
