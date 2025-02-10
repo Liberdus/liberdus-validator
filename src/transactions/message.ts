@@ -50,6 +50,13 @@ export const validate = (tx: Tx.Message, wrappedStates: WrappedStates, response:
   const from: Accounts = wrappedStates[clonedTx.from] && wrappedStates[clonedTx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const to: Accounts = wrappedStates[clonedTx.to] && wrappedStates[clonedTx.to].data
+  const chat: ChatAccount = wrappedStates[tx.chatId] && wrappedStates[tx.chatId].data
+
+  if (!from || !to) {
+    response.reason = 'from or to account does not exist.'
+    return response
+  }
+
   if (tx.sign.owner !== tx.from) {
     response.reason = 'not signed by from account'
     return response
@@ -66,26 +73,29 @@ export const validate = (tx: Tx.Message, wrappedStates: WrappedStates, response:
     response.reason = '"target" account does not exist.'
     return response
   }
-  if (to.data.friends[toShardusAddress(tx.from)]) {
-    if (from.data.balance < network.current.transactionFee) {
-      response.reason = `from account does not have sufficient funds: ${from.data.balance} to cover transaction fee: ${network.current.transactionFee}.`
-      return response
+
+  // Calculate required toll based on chat account state
+  let requiredToll = BigInt(0)
+  if (chat && chat.hasChats) {
+    // Get sender index based on sorted addresses
+    const [addr1, addr2] = utils.sortAddresses(tx.from, tx.to)
+    const senderIndex = addr1 === tx.from ? 0 : 1
+
+    // Check if sender needs to pay toll
+    if (chat.toll.required[senderIndex] === 1) {
+      requiredToll = to.data.toll === null ? network.current.defaultToll : to.data.toll
     }
   } else {
-    if (to.data.toll === null) {
-      if (from.data.balance < network.current.defaultToll + network.current.transactionFee) {
-        response.reason = `from account does not have sufficient funds ${from.data.balance} to cover the default toll + transaction fee ${
-          network.current.defaultToll + network.current.transactionFee
-        }.`
-        return response
-      }
-    } else {
-      if (from.data.balance < to.data.toll + network.current.transactionFee) {
-        response.reason = 'from account does not have sufficient funds.'
-        return response
-      }
-    }
+    // For new chats, sender always pays toll
+    requiredToll = to.data.toll === null ? network.current.defaultToll : to.data.toll
   }
+
+  // Validate balance covers toll + transaction fee
+  if (from.data.balance < requiredToll + network.current.transactionFee) {
+    response.reason = `from account does not have sufficient funds ${from.data.balance} to cover the toll (${requiredToll}) + transaction fee (${network.current.transactionFee}).`
+    return response
+  }
+
   response.success = true
   response.reason = 'This transaction is valid!'
   return response
@@ -95,36 +105,115 @@ export const apply = (tx: Tx.Message, txTimestamp: number, txId: string, wrapped
   const from: UserAccount = wrappedStates[tx.from].data
   const to: UserAccount = wrappedStates[tx.to].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
-  const chat = wrappedStates[tx.chatId].data
-  from.data.balance -= network.current.transactionFee
-  if (!to.data.friends[from.id]) {
-    if (to.data.toll === null) {
-      from.data.balance -= network.current.defaultToll
-      to.data.balance += network.current.defaultToll
-    } else {
-      from.data.balance -= to.data.toll
-      to.data.balance += to.data.toll
-    }
+  const chat: ChatAccount = wrappedStates[tx.chatId].data
+  let tollDeposited = 0n
+
+  if (config.LiberdusFlags.VerboseLogs) {
+    dapp.log(`Applying message tx: ${txId}`, tx, from, to, chat)
   }
+
+  if (!chat) {
+    throw Error('getRelevantAccount must be called before apply')
+  }
+
+  // Deduct transaction fee
+  from.data.balance -= network.current.transactionFee
+
+  // Deduct maintenance fee
   from.data.balance -= utils.maintenanceAmount(txTimestamp, from, network)
 
+  // Handle toll for new or existing chat
+  const [addr1, addr2] = utils.sortAddresses(tx.from, tx.to)
+  const senderIndex = addr1 === tx.from ? 0 : 1
+  const receiverIndex = 1 - senderIndex
+
+  // fail the tx if the chat is blocked
+  if (chat.toll.required[receiverIndex] === 2) {
+    if (config.LiberdusFlags.VerboseLogs) dapp.log(`txId: ${txId} chat is blocked`, chat)
+    from.timestamp = txTimestamp
+    dapp.log('Applied message tx', chat, from, to)
+    return
+  }
+
+  // search last chat message (not transfer) from the end of the messages array
+  let lastMessage = null
+  if (chat.hasChats) {
+    for (const message of chat.messages.slice().reverse()) {
+      if (message.type === 'message') {
+        lastMessage = message
+        break
+      }
+    }
+  }
+  dapp.log(`txId: ${txId} lastMessage`, lastMessage)
+  dapp.log(`Is last message from the other party?`, lastMessage && lastMessage.from === tx.to)
+  dapp.log(`Is last message older than tollTimeout?`, lastMessage && lastMessage.timestamp + network.current.tollTimeout > txTimestamp)
+  dapp.log(`payOnReply`, chat.toll.payOnReply[senderIndex])
+
+  // Process toll
+  if (
+    lastMessage &&
+    lastMessage.from === tx.to &&
+    chat.toll.payOnReply[senderIndex] > 0n &&
+    lastMessage.timestamp + network.current.tollTimeout > txTimestamp
+  ) {
+    // replying to a message from the other party
+    const readToll = chat.toll.payOnRead[senderIndex] // this can be zero if the person replying has read the message
+    const replyToll = chat.toll.payOnReply[senderIndex]
+    const totalToll = readToll + replyToll
+
+    // Calculate network fee
+    const networkFee = (totalToll * BigInt(network.current.tollNetworkTaxPercent) * 10n ** 18n) / (100n * 10n ** 18n)
+    const userAmount = totalToll - networkFee
+
+    // Clear the toll pools
+    chat.toll.payOnRead[senderIndex] = 0n
+    chat.toll.payOnReply[senderIndex] = 0n
+
+    // Transfer toll to replier
+    from.data.balance += userAmount
+    dapp.log(`txId: ${txId} transferring toll to replier`, userAmount, networkFee)
+  } else if (chat.toll.required[receiverIndex] === 1) {
+    // receiver demands toll
+    // Handle toll for new or existing chat when required
+    tollDeposited = to.data.toll === null ? network.current.defaultToll : to.data.toll
+    from.data.balance -= tollDeposited
+
+    // Deposit toll in read and reply pools
+    const halfToll = BigInt(tollDeposited) / 2n
+    chat.toll.payOnRead[receiverIndex] += halfToll
+    chat.toll.payOnReply[receiverIndex] += halfToll
+  }
+
+  // Update chat references
   if (!from.data.chats[tx.to]) {
     from.data.chats[tx.to] = {
       receivedTimestamp: 0,
       chatId: tx.chatId,
     }
   }
-  from.data.chatTimestamp = txTimestamp
-  to.data.chats[tx.from] = {
-    receivedTimestamp: txTimestamp,
-    chatId: tx.chatId,
+
+  if (!to.data.chats[tx.from]) {
+    to.data.chats[tx.from] = {
+      receivedTimestamp: txTimestamp,
+      chatId: tx.chatId,
+    }
   }
-  to.data.chatTimestamp = txTimestamp
 
-  chat.messages.push(tx)
-  // from.data.transactions.push({ ...tx, txId })
-  // to.data.transactions.push({ ...tx, txId })
+  // Add message to chat
+  const messageRecord: Tx.MessageRecord = {
+    ...tx,
+    tollDeposited, // used for reclaiming toll
+  }
+  chat.messages.push(messageRecord)
+  chat.hasChats = true
 
+  // Update replied timestamp for sender
+  chat.replied[senderIndex] = txTimestamp
+  // Mark as read for sender
+  chat.read[senderIndex] = txTimestamp
+
+  // Update timestamps
   chat.timestamp = txTimestamp
   from.timestamp = txTimestamp
   to.timestamp = txTimestamp

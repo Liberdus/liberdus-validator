@@ -110,6 +110,32 @@ export namespace Tx {
     message: string
   }
 
+  export interface MessageRecord extends Message {
+    tollDeposited: bigint
+  }
+
+  export interface Read extends BaseLiberdusTx {
+    from: string
+    to: string
+    chatId: string
+    timestamp: number // timestamp up to which messages are considered read
+  }
+
+  export interface UpdateChatToll extends BaseLiberdusTx {
+    from: string
+    to: string
+    chatId: string
+    required: number // 1 if toll required, 0 if not nd 2 to block other party
+    timestamp: number // timestamp up to which messages are considered read
+  }
+
+  export interface ReclaimToll extends BaseLiberdusTx {
+    from: string
+    to: string
+    chatId: string
+    timestamp: number // timestamp up to which messages are considered read
+  }
+
   export interface NodeReward extends BaseLiberdusTx {
     nodeId: string
     from: string
@@ -315,7 +341,6 @@ export interface UserAccount {
     friends: object
     stake?: bigint
     remove_stake_request: number | null
-    // transactions: object[]
     payments: DeveloperPayment[]
   }
   alias: string | null
@@ -389,10 +414,18 @@ export interface NodeAccountStats {
 
 export interface ChatAccount {
   id: string
-  type: string
-  messages: (Tx.Message | Tx.Transfer)[]
-  timestamp: number
   hash: string
+  type: string
+  timestamp: number
+  messages: (Tx.MessageRecord | Tx.Transfer | Tx.Read)[]
+  toll: {
+    required: [number, number] // 1 if toll required, 0 if not
+    payOnRead: [bigint, bigint] // amount to be paid when reading
+    payOnReply: [bigint, bigint] // amount to be paid when replying
+  }
+  read: [number, number] // timestamps of last read
+  replied: [number, number] // timestamps of last reply
+  hasChats: boolean // if chat has messages
 }
 
 export interface AliasAccount {
@@ -534,6 +567,8 @@ export interface NetworkParameters {
   txPause: boolean
   certCycleDuration: number
   enableNodeSlashing: boolean
+  tollNetworkTaxPercent: number
+  tollTimeout: number
   slashing: {
     enableLeftNetworkEarlySlashing: boolean
     enableSyncTimeoutSlashing: boolean

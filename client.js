@@ -450,11 +450,12 @@ async function _sleep(ms = 0) {
 
 async function injectTx(tx) {
   const data = Utils.safeStringify(tx)
-  console.log(data)
+  console.log('Tx data', data)
   try {
     const res = await axios.post(`http://${HOST}/inject`, { tx: data })
     return res.data
   } catch (err) {
+    console.log('Error injecting tx:', err.message)
     return err.message
   }
 }
@@ -502,9 +503,13 @@ async function getAddress(handle) {
   }
 }
 
+function calculateChatId(to, from) {
+  return crypto.hash([from, to].sort((a, b) => a.localeCompare(b)).join(''))
+}
+
 async function queryMessages(to, from) {
   try {
-    const res = await axios.get(`http://${HOST}/messages/${crypto.hash([from, to].sort((a, b) => a < b).join(''))}`)
+    const res = await axios.get(`http://${HOST}/messages/${calculateChatId(USER.address, to)}`)
     const { messages } = res.data
     return messages
   } catch (error) {
@@ -902,7 +907,7 @@ vorpal.command('transfer', 'transfers tokens to another account').action(async f
     from: USER.address,
     to,
     amount: amountInWei,
-    chatId: crypto.hash([USER.address, to].sort((a, b) => a < b).join``),
+    chatId: calculateChatId(to, USER.address),
     memo: answers.memo ? answers.memo : null,
     timestamp: Date.now(),
   }
@@ -1044,7 +1049,7 @@ vorpal.command('message', 'sends a message to another user').action(async functi
         type: 'message',
         from: USER.address,
         to: to,
-        chatId: crypto.hash([USER.address, to].sort((a, b) => a < b).join``),
+        chatId: calculateChatId(to, USER.address),
         message: encryptedMsg,
         timestamp: Date.now(),
       }
@@ -1056,6 +1061,141 @@ vorpal.command('message', 'sends a message to another user').action(async functi
     } else {
       callback()
     }
+  }
+})
+
+vorpal.command('read', 'sends a message to another user').action(async function (_, callback) {
+  const answers = await this.prompt([
+    {
+      type: 'input',
+      name: 'to',
+      message: 'Enter the alias or publicKey of the target: ',
+    },
+  ])
+  const to = await getAddress(answers.to)
+  const data = await getAccountData(USER.address)
+  const handle = data.account.alias
+  if (to === undefined || to === null) {
+    this.log("Account doesn't exist for: ", answers.to)
+    callback()
+  }
+  const result = await queryMessages(to, USER.address)
+  let hasNewMessages = true
+  if (result.error) {
+    this.log(`There was an error retrieving the toll for ${answers.to}`)
+    this.log(result.error)
+    callback()
+  } else {
+    const answer = await this.prompt({
+      type: 'list',
+      name: 'confirm',
+      message: `would you like to read the message and send "read" tx? `,
+      choices: [
+        { name: 'yes', value: true, short: true },
+        { name: 'no', value: false, short: false },
+      ],
+      default: 'yes',
+    })
+    if (answer.confirm) {
+      // const encryptedMsg = crypto.encrypt(message, crypto.convertSkToCurve(USER.keys.secretKey), crypto.convertPkToCurve(to))
+      const tx = {
+        type: 'read',
+        from: USER.address,
+        to: to,
+        chatId: calculateChatId(to, USER.address),
+        timestamp: Date.now(),
+      }
+      signTransaction(tx)
+      injectTx(tx).then((res) => {
+        this.log(res)
+        callback()
+      })
+    } else {
+      callback()
+    }
+  }
+})
+
+vorpal.command('update chat toll', 'set the toll requirement or block').action(async function (_, callback) {
+  const answers = await this.prompt([
+    {
+      type: 'input',
+      name: 'to',
+      message: 'Enter the alias or publicKey of the targe: ',
+    },
+  ])
+  const to = await getAddress(answers.to)
+  const data = await getAccountData(USER.address)
+  const handle = data.account.alias
+  if (to === undefined || to === null) {
+    console.log(`Account doesn't exist for: ${answers.to}`)
+    callback()
+  }
+
+  const answer = await this.prompt({
+    type: 'input',
+    name: 'required',
+    message: 'Enter the toll required: ',
+  })
+
+  if (answer.required) {
+    const tx = {
+      type: 'update_chat_toll',
+      from: USER.address,
+      to: to,
+      required: parseInt(answer.required),
+      chatId: calculateChatId(to, USER.address),
+      timestamp: Date.now(),
+    }
+    signTransaction(tx)
+    injectTx(tx).then((res) => {
+      this.log(res)
+      callback()
+    })
+  }
+})
+
+vorpal.command('reclaim toll', 'Reclaim the toll from unread message').action(async function (_, callback) {
+  const answers = await this.prompt([
+    {
+      type: 'input',
+      name: 'to',
+      message: 'Enter the alias or publicKey of the targe: ',
+    },
+  ])
+  const to = await getAddress(answers.to)
+  const data = await getAccountData(USER.address)
+  const handle = data.account.alias
+  if (to === undefined || to === null) {
+    console.log(`Account doesn't exist for: ${answers.to}`)
+    callback()
+  }
+
+  const answer = await this.prompt({
+    type: 'list',
+    name: 'reclaim',
+    message: `Set the required setting of the chat account`,
+    choices: [
+      { name: 'toll free', value: 0, short: true },
+      { name: 'toll required', value: 1, short: false },
+      { name: 'block', value: 2, short: false },
+    ],
+    default: '1',
+  })
+
+  if (answer.reclaim) {
+    const tx = {
+      type: 'reclaim_toll',
+      from: USER.address,
+      to: to,
+      chatId: calculateChatId(to, USER.address),
+      timestamp: Date.now(),
+    }
+    signTransaction(tx)
+    injectTx(tx).then((res) => {
+      this.log(res)
+      callback()
+    })
   }
 })
 

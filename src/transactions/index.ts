@@ -9,6 +9,9 @@ import * as create from './create'
 import * as transfer from './transfer'
 import * as distribute from './distribute'
 import * as message from './message'
+import * as read from './read'
+import * as update_chat_toll from './update_chat_toll'
+import * as reclaim_toll from './reclaim_toll'
 import * as toll from './toll'
 import * as friend from './friend'
 import * as remove_friend from './remove_friend'
@@ -58,6 +61,9 @@ export default {
   transfer,
   distribute,
   message,
+  read,
+  update_chat_toll,
+  reclaim_toll,
   toll,
   friend,
   remove_friend,
@@ -108,7 +114,10 @@ export enum TXTypes {
   transfer = 'transfer',
   distribute = 'distribute',
   message = 'message',
+  read = 'read',
   toll = 'toll',
+  update_chat_toll = 'update_chat_toll',
+  reclaim_toll = 'reclaim_toll',
   friend = 'friend',
   remove_friend = 'remove_friend',
   stake = 'stake',

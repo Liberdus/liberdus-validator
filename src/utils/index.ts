@@ -122,7 +122,6 @@ export function nodeReward(address: string, nodeId: string, dapp: Shardus): void
   dapp.log('GENERATED_NODE_REWARD: ', nodeId)
 }
 
-
 // START NETWORK DAO WINDOWS
 export async function startNetworkWindows(address: string, nodeId: string, dapp: Shardus, set = false): Promise<void> {
   const account = await dapp.getLocalOrRemoteAccount(configs.networkAccount)
@@ -133,7 +132,7 @@ export async function startNetworkWindows(address: string, nodeId: string, dapp:
     from: address,
     timestamp: Date.now(),
   }
-  const resp = await dapp.put(tx,  set)
+  const resp = await dapp.put(tx, set)
   dapp.log('start network windows tx', tx, resp)
 }
 
@@ -149,7 +148,7 @@ export async function generateIssue(address: string, nodeId: string, dapp: Shard
     proposal: crypto.hash(`issue-${network.issue}-proposal-1`),
     timestamp: Date.now(),
   }
-  dapp.put(tx,  set)
+  dapp.put(tx, set)
   dapp.log('GENERATED_ISSUE: ', nodeId, tx)
 }
 
@@ -164,7 +163,7 @@ export async function generateDevIssue(address: string, nodeId: string, dapp: Sh
     devIssue: calculateDevIssueId(network.devIssue),
     timestamp: Date.now(),
   }
-  dapp.put(tx,  set)
+  dapp.put(tx, set)
   dapp.log('GENERATED_DEV_ISSUE: ', nodeId, tx)
 }
 
@@ -190,7 +189,7 @@ export async function tallyVotes(address: string, nodeId: string, dapp: Shardus,
       timestamp: Date.now(),
     }
     // todo: why is this not signed by the node?
-    dapp.put(tx,  set)
+    dapp.put(tx, set)
     dapp.log('GENERATED_TALLY: ', nodeId, tx)
   } catch (err) {
     dapp.log('ERR: ', err)
@@ -218,7 +217,7 @@ export async function tallyDevVotes(address: string, nodeId: string, dapp: Shard
       devProposals: devIssue.devProposals,
       timestamp: Date.now(),
     }
-    dapp.put(tx,  set)
+    dapp.put(tx, set)
     dapp.log('GENERATED_DEV_TALLY: ', nodeId, tx)
   } catch (err) {
     dapp.log('ERR: ', err)
@@ -253,7 +252,7 @@ export async function injectDevParameters(address: string, nodeId: string, dapp:
     devIssue: crypto.hash(`dev-issue-${network.devIssue}`),
     timestamp: Date.now(),
   }
-  dapp.put(tx,  set)
+  dapp.put(tx, set)
   dapp.log('GENERATED_DEV_PARAMETER: ', nodeId, tx)
 }
 
@@ -268,7 +267,7 @@ export async function applyParameters(address: string, nodeId: string, dapp: Sha
     issue: crypto.hash(`issue-${network.issue}`),
     timestamp: Date.now(),
   }
-  dapp.put(tx,  set)
+  dapp.put(tx, set)
   dapp.log('GENERATED_APPLY: ', nodeId, tx)
 }
 
@@ -297,7 +296,7 @@ export function releaseDeveloperFunds(payment: DeveloperPayment, address: string
     payment: payment,
     timestamp: Date.now(),
   }
-  dapp.put(tx,  set)
+  dapp.put(tx, set)
   dapp.log('GENERATED_DEV_PAYMENT: ', nodeId)
 }
 
@@ -381,6 +380,10 @@ export const isObject = (val): boolean => {
 
 export const isValidAddress = (address: string): boolean => {
   return address.length === 64
+}
+
+export const sortAddresses = (from: string, to: string): string[] => {
+  return [from, to].sort((a, b) => a.localeCompare(b))
 }
 
 // From: https://stackoverflow.com/a/19270021
