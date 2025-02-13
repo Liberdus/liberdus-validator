@@ -3,7 +3,7 @@ import { Shardus, ShardusTypes } from '@shardus/core'
 import * as utils from './../../utils'
 import * as config from './../../config'
 import * as AccountsStorage from '../../storage/accountStorage'
-import { UserAccount, WrappedStates, Tx, TransactionKeys, NodeAccount } from './../../@types'
+import { UserAccount, WrappedStates, Tx, TransactionKeys, NodeAccount, AppReceiptData } from './../../@types'
 
 export const validate_fields = (tx: Tx.WithdrawStake, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.nominator !== 'string' && utils.isValidAddress(tx.nominator) === false) {
@@ -89,7 +89,14 @@ export const validate = (tx: Tx.WithdrawStake, wrappedStates: WrappedStates, res
   return response
 }
 
-export const apply = (tx: Tx.WithdrawStake, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.WithdrawStake,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const nominatorAccount: UserAccount = wrappedStates[tx.nominator].data
   const nodeAccount: NodeAccount = wrappedStates[tx.nominee] && wrappedStates[tx.nominee].data
 
@@ -104,9 +111,9 @@ export const apply = (tx: Tx.WithdrawStake, txTimestamp: number, txId: string, w
   const txFeeUsd = AccountsStorage.cachedNetworkAccount.current.transactionFee
   const txFee = utils.scaleByStabilityFactor(txFeeUsd, AccountsStorage.cachedNetworkAccount)
   // [TODO] check if the maintainance fee is also needed in withdraw_stake tx
-  const maintenanceFeeUsd = utils.maintenanceAmount(txTimestamp, nominatorAccount, AccountsStorage.cachedNetworkAccount)
-  console.log('currentBalance', currentBalance, 'stake', stake, 'reward', reward, 'txFee', txFee, 'maintenanceFeeUsd', maintenanceFeeUsd)
-  const newBalance = currentBalance + stake + reward - txFee - maintenanceFeeUsd
+  const maintenanceFee = utils.maintenanceAmount(txTimestamp, nominatorAccount, AccountsStorage.cachedNetworkAccount)
+  console.log('currentBalance', currentBalance, 'stake', stake, 'reward', reward, 'txFee', txFee, 'maintenanceFee', maintenanceFee)
+  const newBalance = currentBalance + stake + reward - txFee - maintenanceFee
   console.log('newBalance', newBalance)
   nominatorAccount.data.balance = newBalance
   nominatorAccount.operatorAccountInfo.stake = BigInt(0)
@@ -124,11 +131,27 @@ export const apply = (tx: Tx.WithdrawStake, txTimestamp: number, txId: string, w
   nodeAccount.reward = BigInt(0)
   nodeAccount.rewardStartTime = 0
   nodeAccount.rewardEndTime = 0
-  nodeAccount.rewarded = false
 
   nominatorAccount.timestamp = txTimestamp
   nodeAccount.timestamp = txTimestamp
   // nominator.data.transactions.push({ ...tx, txId })
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.nominator,
+    to: tx.nominee,
+    type: tx.type,
+    transactionFee: txFee,
+    additionalInfo: {
+      maintenanceFee,
+      stake,
+      reward,
+      totalUnstakeAmount: stake + reward,
+    },
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied withdraw_stake tx', nominatorAccount, nodeAccount)
 }
 

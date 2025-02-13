@@ -2,7 +2,7 @@ import * as crypto from '../crypto'
 import { Shardus, ShardusTypes } from '@shardus/core'
 import * as utils from '../utils'
 import * as config from '../config'
-import { Accounts, UserAccount, NetworkAccount, WrappedStates, Tx, TransactionKeys } from '../@types'
+import { Accounts, UserAccount, NetworkAccount, WrappedStates, Tx, TransactionKeys, AppReceiptData } from '../@types'
 
 export const validate_fields = (tx: Tx.Stake, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.from !== 'string') {
@@ -46,14 +46,39 @@ export const validate = (tx: Tx.Stake, wrappedStates: WrappedStates, response: S
   return response
 }
 
-export const apply = (tx: Tx.Stake, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.Stake,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: UserAccount = wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
-  from.data.balance -= network.current.stakeRequiredUsd
-  from.data.balance -= utils.maintenanceAmount(txTimestamp, from, network)
-  from.data.stake = network.current.stakeRequiredUsd
+  const stakeAmount = network.current.stakeRequiredUsd
+  from.data.balance -= stakeAmount
+  const transactionFee = network.current.transactionFee
+  const maintenanceFee = utils.maintenanceAmount(txTimestamp, from, network)
+  from.data.balance -= transactionFee + maintenanceFee
+  from.data.stake = stakeAmount
   from.timestamp = txTimestamp
   // from.data.transactions.push({ ...tx, txId })
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.from,
+    type: tx.type,
+    transactionFee: transactionFee,
+    additionalInfo: {
+      maintenanceFee,
+      stakeAmount,
+    },
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied stake tx', from)
 }
 

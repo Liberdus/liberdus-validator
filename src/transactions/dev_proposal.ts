@@ -5,7 +5,18 @@ import * as utils from '../utils'
 import create from '../accounts'
 import _ from 'lodash'
 import * as config from '../config'
-import { Accounts, UserAccount, NetworkAccount, DevIssueAccount, WrappedStates, DeveloperPayment, DevProposalAccount, Tx, TransactionKeys } from '../@types'
+import {
+  Accounts,
+  UserAccount,
+  NetworkAccount,
+  DevIssueAccount,
+  WrappedStates,
+  DeveloperPayment,
+  DevProposalAccount,
+  Tx,
+  TransactionKeys,
+  AppReceiptData,
+} from '../@types'
 
 export const validate_fields = (tx: Tx.DevProposal, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.devIssue !== 'string') {
@@ -127,7 +138,14 @@ export const validate = (tx: Tx.DevProposal, wrappedStates: WrappedStates, respo
   return response
 }
 
-export const apply = (tx: Tx.DevProposal, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.DevProposal,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: UserAccount = wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const devIssue: DevIssueAccount = wrappedStates[tx.devIssue].data
@@ -150,6 +168,19 @@ export const apply = (tx: Tx.DevProposal, txTimestamp: number, txId: string, wra
   from.timestamp = txTimestamp
   devIssue.timestamp = txTimestamp
   devProposal.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    // the actual txTo seems to be two accounts ( devIssue and devProposal )
+    // to: ,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
+
   dapp.log('Applied dev_proposal tx', from, devIssue, devProposal)
 }
 

@@ -13,6 +13,7 @@ import {
   ProposalAccount,
   Tx,
   TransactionKeys,
+  AppReceiptData,
 } from '../@types'
 
 export const validate_fields = (tx: Tx.Tally, response: ShardusTypes.IncomingTransactionResult) => {
@@ -87,7 +88,14 @@ export const validate = (tx: Tx.Tally, wrappedStates: WrappedStates, response: S
   return response
 }
 
-export const apply = (tx: Tx.Tally, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp, applyResponse) => {
+export const apply = (
+  tx: Tx.Tally,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: NodeAccount = wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const issue: IssueAccount = wrappedStates[tx.issue].data
@@ -131,7 +139,7 @@ export const apply = (tx: Tx.Tally, txTimestamp: number, txId: string, wrappedSt
   }
 
   const when = txTimestamp + config.ONE_SECOND * 10
-  let value = {
+  const value = {
     type: 'apply_tally',
     timestamp: when,
     network: config.networkAccount,
@@ -150,6 +158,17 @@ export const apply = (tx: Tx.Tally, txTimestamp: number, txId: string, wrappedSt
   from.timestamp = txTimestamp
   issue.timestamp = txTimestamp
   winner.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.issue,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied tally tx', txId, issue, winner, ourAppDefinedData)
 }
 

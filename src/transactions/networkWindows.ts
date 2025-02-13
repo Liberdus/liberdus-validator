@@ -2,7 +2,7 @@ import stringify from 'fast-stable-stringify'
 import { Shardus, ShardusTypes } from '@shardus/core'
 import * as config from '../config'
 import create from '../accounts'
-import { NodeAccount, UserAccount, NetworkAccount, IssueAccount, WrappedStates, OurAppDefinedData, Tx, TransactionKeys } from '../@types'
+import { NodeAccount, UserAccount, NetworkAccount, IssueAccount, WrappedStates, OurAppDefinedData, Tx, TransactionKeys, AppReceiptData } from '../@types'
 
 export const validate_fields = (tx: Tx.NetworkWindows, response: ShardusTypes.IncomingTransactionResult) => {
   return response
@@ -28,14 +28,14 @@ export const apply = (
   wrappedStates: WrappedStates,
   dapp: Shardus,
   applyResponse: ShardusTypes.ApplyResponse,
-) => {
+): void => {
   const from: NodeAccount = wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
 
   const when = txTimestamp + config.ONE_SECOND * 10
   const windowsStartTime = when + config.ONE_SECOND * 10
   const { windows, devWindows } = getWindows(windowsStartTime, network)
-  let value = {
+  const value = {
     type: 'apply_parameters',
     timestamp: when,
     network: config.networkAccount,
@@ -53,6 +53,17 @@ export const apply = (
   ourAppDefinedData.globalMsg = { address: config.networkAccount, addressHash, value, when, source: from.id }
 
   from.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: config.networkAccount,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log(`Apply network_windows tx ${txId} value`, value)
 }
 

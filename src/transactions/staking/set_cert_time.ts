@@ -1,7 +1,7 @@
 import { nestedCountersInstance, Shardus, ShardusTypes } from '@shardus/core'
 import config, { ONE_SECOND, LiberdusFlags } from '../../config'
 import { getAccountWithRetry } from './query_certificate'
-import { AccountQueryResponse, WrappedStates, InjectTxResponse, NodeAccount, UserAccount, Tx, TransactionKeys } from '../../@types'
+import { AccountQueryResponse, WrappedStates, InjectTxResponse, NodeAccount, UserAccount, Tx, TransactionKeys, AppReceiptData } from '../../@types'
 import * as AccountsStorage from '../../storage/accountStorage'
 import { getRandom, scaleByStabilityFactor, InjectTxToConsensor } from '../../utils'
 import { Utils } from '@shardus/types'
@@ -119,7 +119,14 @@ export const validate = (tx: Tx.SetCertTime, wrappedStates: WrappedStates, respo
   return response
 }
 
-export const apply = (tx: Tx.SetCertTime, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.SetCertTime,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   /* prettier-ignore */ if (logFlags.dapp_verbose) console.log(`applySetCertTimeTx txTimestamp:${txTimestamp}   tx.timestamp:${tx.timestamp}`, tx)
 
   const operatorAccount = wrappedStates[tx.nominator].data as UserAccount
@@ -155,14 +162,27 @@ export const apply = (tx: Tx.SetCertTime, txTimestamp: number, txId: string, wra
   // deduct tx fee if certExp is not set yet or far from expiration
   /* prettier-ignore */ if (logFlags.dapp_verbose) console.log(`applySetCertTimeTx shouldChargeTxFee: ${shouldChargeTxFee}`)
 
+  let costTxFee = BigInt(0)
   if (shouldChargeTxFee) {
-    const costTxFee = scaleByStabilityFactor(BigInt(AccountsStorage.cachedNetworkAccount.current.transactionFee), AccountsStorage.cachedNetworkAccount)
+    costTxFee = scaleByStabilityFactor(BigInt(AccountsStorage.cachedNetworkAccount.current.transactionFee), AccountsStorage.cachedNetworkAccount)
     operatorAccount.data.balance = operatorAccount.data.balance - costTxFee
   }
 
   /* prettier-ignore */ if (logFlags.dapp_verbose) console.log('operatorAccount After', operatorAccount)
 
   operatorAccount.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.nominator,
+    to: tx.nominee,
+    type: tx.type,
+    transactionFee: costTxFee,
+  }
+
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   // nominator.data.transactions.push({ ...tx, txId })
   dapp.log('Applied set_cert_time tx', operatorAccount)
 }

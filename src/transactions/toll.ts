@@ -3,7 +3,7 @@ import { Shardus, ShardusTypes } from '@shardus/core'
 import * as utils from '../utils'
 import create from '../accounts'
 import * as config from '../config'
-import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys, AppReceiptData } from '../@types'
 
 export const validate_fields = (tx: Tx.Toll, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.from !== 'string') {
@@ -61,14 +61,36 @@ export const validate = (tx: Tx.Toll, wrappedStates: WrappedStates, response: Sh
   return response
 }
 
-export const apply = (tx: Tx.Toll, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.Toll,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: UserAccount = wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
-  from.data.balance -= network.current.transactionFee
-  from.data.balance -= utils.maintenanceAmount(txTimestamp, from, network)
+  const transactionFee = network.current.transactionFee
+  const maintenanceFee = utils.maintenanceAmount(txTimestamp, from, network)
+  from.data.balance -= transactionFee + maintenanceFee
   from.data.toll = tx.toll
   // from.data.transactions.push({ ...tx, txId })
   from.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.from,
+    type: tx.type,
+    transactionFee: transactionFee,
+    additionalInfo: {
+      maintenanceFee,
+    },
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied toll tx', from)
 }
 

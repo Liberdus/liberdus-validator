@@ -3,7 +3,18 @@ import { Shardus, ShardusTypes } from '@shardus/core'
 import * as utils from '../utils'
 import create from '../accounts'
 import * as config from '../config'
-import { Accounts, NetworkParameters, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import {
+  Accounts,
+  NetworkParameters,
+  UserAccount,
+  NetworkAccount,
+  IssueAccount,
+  WrappedStates,
+  ProposalAccount,
+  Tx,
+  TransactionKeys,
+  AppReceiptData,
+} from '../@types'
 
 export const validate_fields = (tx: Tx.Proposal, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.from !== 'string') {
@@ -192,7 +203,14 @@ export const validate = (tx: Tx.Proposal, wrappedStates: WrappedStates, response
   return response
 }
 
-export const apply = (tx: Tx.Proposal, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.Proposal,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: UserAccount = wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const proposal: ProposalAccount = wrappedStates[tx.proposal].data
@@ -211,6 +229,18 @@ export const apply = (tx: Tx.Proposal, txTimestamp: number, txId: string, wrappe
   from.timestamp = txTimestamp
   issue.timestamp = txTimestamp
   proposal.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    // the actual txTo seems to be two accounts ( issue and proposal )
+    // to: ,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied proposal tx', from, issue, proposal)
 }
 

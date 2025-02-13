@@ -373,7 +373,6 @@ export interface NodeAccount {
   rewardEndTime: number
   penalty: bigint
   nodeAccountStats: NodeAccountStats
-  rewarded: boolean
   rewardRate: bigint
 }
 
@@ -711,4 +710,15 @@ export interface LeftNetworkEarlyViolationData {
 export interface NodeRefutedViolationData {
   nodeRefutedCycle: number
   nodeRefutedTime: number
+}
+
+export interface AppReceiptData {
+  txId: string
+  timestamp: number
+  success: boolean
+  from: string
+  to?: string // Can be undefined if the transaction is not directed to any account or is directed more than one account
+  type: string
+  transactionFee: bigint
+  additionalInfo?: object // Can add any additional info related to the transaction that are not in the original transaction data
 }

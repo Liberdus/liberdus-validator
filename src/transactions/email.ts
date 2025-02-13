@@ -3,7 +3,7 @@ import axios from 'axios'
 import { Shardus, ShardusTypes } from '@shardus/core'
 import create from '../accounts'
 import * as config from '../config'
-import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys, AppReceiptData } from '../@types'
 
 export const validate_fields = (tx: Tx.Email, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.signedTx !== 'object') {
@@ -72,7 +72,14 @@ export const validate = (tx: Tx.Email, wrappedStates: WrappedStates, response: S
   return response
 }
 
-export const apply = (tx: Tx.Email, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.Email,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const source: UserAccount = wrappedStates[tx.signedTx.from].data
   const nodeId = dapp.getNodeId()
   const { address } = dapp.getNode(nodeId)
@@ -100,6 +107,17 @@ export const apply = (tx: Tx.Email, txTimestamp: number, txId: string, wrappedSt
       timestamp: Date.now(),
     })
   }
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.signedTx.from,
+    to: tx.signedTx.from,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied email tx', source)
 }
 

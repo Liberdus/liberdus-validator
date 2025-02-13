@@ -1,7 +1,7 @@
 import { Shardus, ShardusTypes } from '@shardus/core'
 import * as config from '../config'
 import create from '../accounts'
-import { NodeAccount, OurAppDefinedData, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import { NodeAccount, OurAppDefinedData, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys, AppReceiptData } from '../@types'
 
 export const validate_fields = (tx: Tx.Parameters, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.from !== 'string') {
@@ -47,14 +47,21 @@ export const validate = (tx: Tx.Parameters, wrappedStates: WrappedStates, respon
   return response
 }
 
-export const apply = (tx: Tx.Parameters, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp, applyResponse: ShardusTypes.ApplyResponse) => {
+export const apply = (
+  tx: Tx.Parameters,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: NodeAccount = wrappedStates[tx.from].data
 
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const issue: IssueAccount = wrappedStates[tx.issue].data
 
   const when = txTimestamp + config.ONE_SECOND * 10
-  let value = {
+  const value = {
     type: 'apply_parameters',
     timestamp: when,
     network: config.networkAccount,
@@ -74,6 +81,17 @@ export const apply = (tx: Tx.Parameters, txTimestamp: number, txId: string, wrap
 
   from.timestamp = txTimestamp
   issue.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.issue,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied parameters tx', txId, tx, issue, value)
 }
 

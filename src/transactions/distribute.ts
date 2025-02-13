@@ -3,7 +3,7 @@ import { Shardus, ShardusTypes } from '@shardus/core'
 import * as utils from '../utils'
 import create from '../accounts'
 import * as config from '../config'
-import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys, AppReceiptData } from '../@types'
 
 export const validate_fields = (tx: Tx.Distribute, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.from !== 'string') {
@@ -57,18 +57,43 @@ export const validate = (tx: Tx.Distribute, wrappedStates: WrappedStates, respon
   return response
 }
 
-export const apply = (tx: Tx.Distribute, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.Distribute,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: UserAccount = wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const recipients: UserAccount[] = tx.recipients.map((id: string) => wrappedStates[id].data)
-  from.data.balance -= network.current.transactionFee
+  const transactionFee = network.current.transactionFee
+  from.data.balance -= transactionFee
   // from.data.transactions.push({ ...tx, txId })
   for (const user of recipients) {
     from.data.balance -= tx.amount
     user.data.balance += tx.amount
     // user.data.transactions.push({ ...tx, txId })
   }
-  from.data.balance -= utils.maintenanceAmount(txTimestamp, from, network)
+  const maintenanceFee = utils.maintenanceAmount(txTimestamp, from, network)
+  from.data.balance -= maintenanceFee
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    // Multiple recipients
+    // to: ,
+    type: tx.type,
+    transactionFee: BigInt(0),
+    additionalInfo: {
+      maintenanceFee,
+    },
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
+
   dapp.log('Applied distribute transaction', from, recipients)
 }
 
