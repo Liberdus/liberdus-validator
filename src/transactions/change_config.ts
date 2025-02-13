@@ -1,6 +1,6 @@
 import { Shardus, ShardusTypes } from '@shardus/core'
 import * as config from '../config'
-import { UserAccount, NetworkAccount, WrappedStates, OurAppDefinedData, Tx, TransactionKeys } from '../@types'
+import { UserAccount, NetworkAccount, WrappedStates, OurAppDefinedData, Tx, TransactionKeys, AppReceiptData } from '../@types'
 import { TXTypes } from '.'
 import { Utils } from '@shardus/types'
 
@@ -48,9 +48,8 @@ export const apply = (
   wrappedStates: WrappedStates,
   dapp,
   applyResponse: ShardusTypes.ApplyResponse,
-) => {
+): void => {
   const from: UserAccount = wrappedStates[tx.from].data
-  const network: NetworkAccount = wrappedStates[config.networkAccount].data
   let changeOnCycle
   let cycleData: ShardusTypes.Cycle
 
@@ -62,7 +61,7 @@ export const apply = (
   }
 
   const when = txTimestamp + config.ONE_SECOND * 10
-  let value = {
+  const value = {
     type: TXTypes.apply_change_config,
     timestamp: when,
     network: config.networkAccount,
@@ -75,6 +74,17 @@ export const apply = (
   ourAppDefinedData.globalMsg = { address: config.networkAccount, addressHash, value, when, source: from.id }
 
   from.timestamp = tx.timestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: config.networkAccount,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied change_config tx')
 }
 

@@ -2,7 +2,7 @@ import * as crypto from '../crypto'
 import { Shardus, ShardusTypes } from '@shardus/core'
 import create from '../accounts'
 import * as config from '../config'
-import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys, AppReceiptData } from '../@types'
 
 export const validate_fields = (tx: Tx.SnapshotClaim, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.from !== 'string') {
@@ -49,15 +49,38 @@ export const validate = (tx: Tx.SnapshotClaim, wrappedStates: WrappedStates, res
   return response
 }
 
-export const apply = (tx: Tx.SnapshotClaim, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.SnapshotClaim,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: UserAccount = wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
-  from.data.balance += network.snapshot[tx.from]
+  const claimedSnapshotAmount = network.snapshot[tx.from]
+  from.data.balance += claimedSnapshotAmount
   network.snapshot[tx.from] = 0
   // from.data.transactions.push({ ...tx, txId })
   from.claimedSnapshot = true
   from.timestamp = txTimestamp
   network.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.from,
+    type: tx.type,
+    transactionFee: BigInt(0),
+    additionalInfo: {
+      claimedSnapshotAmount,
+    },
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
+
   dapp.log('Applied snapshot_claim tx', from, network)
 }
 

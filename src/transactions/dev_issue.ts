@@ -2,7 +2,7 @@ import * as crypto from '../crypto'
 import { Shardus, ShardusTypes } from '@shardus/core'
 import create from '../accounts'
 import * as config from '../config'
-import { DevIssueAccount, NodeAccount, NetworkAccount, WrappedStates, Tx, TransactionKeys } from '../@types'
+import { DevIssueAccount, NodeAccount, NetworkAccount, WrappedStates, Tx, TransactionKeys, AppReceiptData } from '../@types'
 
 export const validate_fields = (tx: Tx.DevIssue, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.nodeId !== 'string') {
@@ -54,7 +54,14 @@ export const validate = (tx: Tx.DevIssue, wrappedStates: WrappedStates, response
   return response
 }
 
-export const apply = (tx: Tx.DevIssue, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.DevIssue,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: NodeAccount = wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const devIssue: DevIssueAccount = wrappedStates[tx.devIssue].data
@@ -64,6 +71,18 @@ export const apply = (tx: Tx.DevIssue, txTimestamp: number, txId: string, wrappe
 
   from.timestamp = txTimestamp
   devIssue.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.devIssue,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
+
   dapp.log('Applied dev_issue tx', txId, devIssue)
 }
 

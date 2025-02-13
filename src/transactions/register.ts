@@ -3,7 +3,7 @@ import { Shardus, ShardusTypes } from '@shardus/core'
 import create from '../accounts'
 import { isValidUncompressedPublicKey, getAddressFromPublicKey } from '../utils/address'
 import * as config from '../config'
-import { AliasAccount, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import { AliasAccount, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys, AppReceiptData } from '../@types'
 
 export const validate_fields = (tx: Tx.Register, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.aliasHash !== 'string') {
@@ -89,7 +89,14 @@ export const validate = (tx: Tx.Register, wrappedStates: WrappedStates, response
   return response
 }
 
-export const apply = (tx: Tx.Register, txTimestamp: number, txId: string, wrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.Register,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: UserAccount = wrappedStates[tx.from].data
   const alias: AliasAccount = wrappedStates[tx.aliasHash].data
   // from.data.balance -= network.current.transactionFee
@@ -102,6 +109,17 @@ export const apply = (tx: Tx.Register, txTimestamp: number, txId: string, wrappe
   // from.data.transactions.push({ ...tx, txId })
   alias.timestamp = txTimestamp
   from.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.aliasHash,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied register tx', from, alias)
 }
 

@@ -11,6 +11,7 @@ import {
   NodeRefutedViolationData,
   SyncingTimeoutViolationData,
   TransactionKeys,
+  AppReceiptData,
 } from '../../@types'
 import * as AccountsStorage from '../../storage/accountStorage'
 import { _sleep, generateTxId, scaleByStabilityFactor } from '../../utils'
@@ -222,7 +223,14 @@ export const validate = (tx: Tx.PenaltyTX, wrappedStates: WrappedStates, respons
   return response
 }
 
-export const apply = (tx: Tx.PenaltyTX, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.PenaltyTX,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   if (LiberdusFlags.VerboseLogs) console.log(`Running applyPenaltyTX`, tx, wrappedStates)
   /* eslint-disable security/detect-object-injection */
   const nodeAccount = wrappedStates[tx.reportedNodePublickKey].data as NodeAccount
@@ -271,6 +279,28 @@ export const apply = (tx: Tx.PenaltyTX, txTimestamp: number, txId: string, wrapp
   nodeAccount.nodeAccountStats.lastPenaltyTime = eventTime
 
   if (LiberdusFlags.VerboseLogs) console.log(`Calculating updated node penalty. nodePenaltyAmount: ${nodeAccount.penalty}`)
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.reportedNodePublickKey,
+    to: tx.nominator,
+    type: tx.type,
+    transactionFee: BigInt(0),
+    additionalInfo: {
+      penaltyAmount,
+    },
+  }
+  if (tx.violationType === ViolationType.LeftNetworkEarly) {
+    appReceiptData.additionalInfo = {
+      ...appReceiptData.additionalInfo,
+      nodeStartTime: nodeAccount.rewardStartTime,
+      nodeEndTime: nodeAccount.rewardEndTime,
+    }
+  }
+
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
 
   nestedCountersInstance.countEvent('liberdus-penalty', `Applied PenaltyTX`)
   if (logFlags.dapp_verbose) dapp.log('Applied PenaltyTX', tx.reportedNodePublickKey)

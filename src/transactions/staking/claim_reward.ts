@@ -2,7 +2,7 @@ import { nestedCountersInstance, Shardus, ShardusTypes } from '@shardus/core'
 import * as crypto from '../../crypto'
 import { LiberdusFlags } from '../../config'
 import { logFlags } from '@shardus/core/dist/logger'
-import { NodeAccount, UserAccount, WrappedStates, Tx, TransactionKeys } from '../../@types'
+import { NodeAccount, UserAccount, WrappedStates, Tx, TransactionKeys, AppReceiptData } from '../../@types'
 import * as AccountsStorage from '../../storage/accountStorage'
 import { scaleByStabilityFactor, _sleep, generateTxId } from '../../utils'
 import { TXTypes } from '..'
@@ -175,19 +175,20 @@ export const validate = (tx: Tx.ClaimRewardTX, wrappedStates: WrappedStates, res
     return response
   }
 
-  if (nodeAccount.rewarded === true) {
-    nestedCountersInstance.countEvent('liberdus-staking', `applyClaimRewardTx fail already rewarded`)
-    if (LiberdusFlags.VerboseLogs) console.log('applyClaimRewardTx fail already rewarded', tx)
-    response.reason = 'applyClaimReward failed already rewarded'
-    return response
-  }
   if (LiberdusFlags.VerboseLogs) console.log('validateClaimRewardState success', tx)
   response.success = true
   response.reason = 'This transaction is valid!'
   return response
 }
 
-export const apply = (tx: Tx.ClaimRewardTX, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.ClaimRewardTX,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   if (LiberdusFlags.VerboseLogs) console.log(`Running applyClaimRewardTx`, tx, wrappedStates)
   const nodeAccount = wrappedStates[tx.nominee].data as NodeAccount
   const operatorAccount = wrappedStates[tx.nominator].data as UserAccount
@@ -218,8 +219,6 @@ export const apply = (tx: Tx.ClaimRewardTX, txTimestamp: number, txId: string, w
   nodeAccount.reward = nodeAccount.reward + rewardedAmount
   nodeAccount.timestamp = txTimestamp
 
-  nodeAccount.rewarded = true
-
   // update the node account historical stats
   nodeAccount.nodeAccountStats.totalReward = nodeAccount.nodeAccountStats.totalReward + rewardedAmount
   nodeAccount.nodeAccountStats.history.push({
@@ -242,6 +241,23 @@ export const apply = (tx: Tx.ClaimRewardTX, txTimestamp: number, txId: string, w
     console.log(
       `Calculating node reward. nodeRewardAmount: ${nodeRewardAmount}, nodeRewardInterval: ${network.current.nodeRewardInterval} ms, uptime duration: ${durationInNetwork} sec, rewardedAmount: ${rewardedAmount}, finalReward: ${nodeAccount.reward}   nodeAccount.rewardEndTime:${nodeAccount.rewardEndTime}  nodeAccount.rewardStartTime:${nodeAccount.rewardStartTime} `,
     )
+
+  const appReceiptData: AppReceiptData = {
+    txId: txId,
+    timestamp: txTimestamp,
+    success: true,
+    type: tx.type,
+    from: tx.nominee,
+    to: tx.nominator,
+    transactionFee: BigInt(0),
+    additionalInfo: {
+      nodeStartTime: nodeAccount.rewardStartTime,
+      nodeEndTime: nodeAccount.rewardEndTime,
+      rewardedAmount,
+    },
+  }
+
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
 
   nestedCountersInstance.countEvent('liberdus-staking', `Applied ClaimRewardTX`)
   if (logFlags.dapp_verbose) dapp.log('Applied ClaimRewardTX', tx.nominee)

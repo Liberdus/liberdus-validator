@@ -2,7 +2,7 @@ import { Utils } from '@shardus/types'
 import { Shardus, ShardusTypes } from '@shardus/core'
 import * as config from '../config'
 import create from '../accounts'
-import { NodeAccount, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import { NodeAccount, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys, AppReceiptData } from '../@types'
 
 export const validate_fields = (tx: Tx.InitNetwork, response: ShardusTypes.IncomingTransactionResult) => {
   return response
@@ -21,11 +21,28 @@ export const validate = (tx: Tx.InitNetwork, wrappedStates: WrappedStates, respo
   return response
 }
 
-export const apply = (tx: Tx.InitNetwork, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.InitNetwork,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   network.timestamp = txTimestamp
   console.log(`init_network NETWORK_ACCOUNT: ${Utils.safeStringify(network)}`)
   // from.timestamp = txTimestamp
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: config.networkAccount,
+    to: config.networkAccount,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied init_network transaction', network)
 }
 

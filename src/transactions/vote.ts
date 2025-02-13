@@ -1,7 +1,7 @@
 import * as crypto from '../crypto'
 import { Shardus, ShardusTypes } from '@shardus/core'
 import * as utils from '../utils'
-import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys, AppReceiptData } from '../@types'
 import create from '../accounts'
 import * as config from '../config'
 
@@ -81,19 +81,41 @@ export const validate = (tx: Tx.Vote, wrappedStates: WrappedStates, response: Sh
   return response
 }
 
-export const apply = (tx: Tx.Vote, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.Vote,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: UserAccount = wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const proposal: ProposalAccount = wrappedStates[tx.proposal].data
   from.data.balance -= tx.amount
-  from.data.balance -= network.current.transactionFee
-  from.data.balance -= utils.maintenanceAmount(txTimestamp, from, network)
+  const transactionFee = network.current.transactionFee
+  const maintenanceFee = utils.maintenanceAmount(txTimestamp, from, network)
+  from.data.balance -= transactionFee + maintenanceFee
   proposal.power += Number(tx.amount)
   proposal.totalVotes++
 
   // from.data.transactions.push({ ...tx, txId })
   from.timestamp = txTimestamp
   proposal.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.proposal,
+    type: tx.type,
+    transactionFee,
+    additionalInfo: {
+      maintenanceFee,
+    },
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied vote tx', from, proposal)
 }
 

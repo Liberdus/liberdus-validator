@@ -3,7 +3,7 @@ import { Shardus, ShardusTypes } from '@shardus/core'
 import * as utils from '../utils'
 import create from '../accounts'
 import * as config from '../config'
-import { Accounts, UserAccount, NetworkAccount, ChatAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import { Accounts, UserAccount, NetworkAccount, ChatAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys, AppReceiptData } from '../@types'
 import { toShardusAddress } from '../utils/address'
 
 export const validate_fields = (tx: Tx.Message, response: ShardusTypes.IncomingTransactionResult) => {
@@ -91,23 +91,27 @@ export const validate = (tx: Tx.Message, wrappedStates: WrappedStates, response:
   return response
 }
 
-export const apply = (tx: Tx.Message, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.Message,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: UserAccount = wrappedStates[tx.from].data
   const to: UserAccount = wrappedStates[tx.to].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const chat = wrappedStates[tx.chatId].data
-  from.data.balance -= network.current.transactionFee
+  const transactionFee = network.current.transactionFee
+  const maintenanceFee = utils.maintenanceAmount(txTimestamp, from, network)
+  from.data.balance -= transactionFee + maintenanceFee
+  let tollFee = BigInt(0)
   if (!to.data.friends[from.id]) {
-    if (to.data.toll === null) {
-      from.data.balance -= network.current.defaultToll
-      to.data.balance += network.current.defaultToll
-    } else {
-      from.data.balance -= to.data.toll
-      to.data.balance += to.data.toll
-    }
+    tollFee = to.data.toll === null ? network.current.defaultToll : to.data.toll
+    from.data.balance -= tollFee
+    to.data.balance += tollFee
   }
-  from.data.balance -= utils.maintenanceAmount(txTimestamp, from, network)
-
   if (!from.data.chats[tx.to]) {
     from.data.chats[tx.to] = {
       receivedTimestamp: 0,
@@ -128,6 +132,21 @@ export const apply = (tx: Tx.Message, txTimestamp: number, txId: string, wrapped
   chat.timestamp = txTimestamp
   from.timestamp = txTimestamp
   to.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.to,
+    type: tx.type,
+    transactionFee,
+    additionalInfo: {
+      maintenanceFee,
+      tollFee,
+    },
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
 
   dapp.log('Applied message tx', chat, from, to)
 }

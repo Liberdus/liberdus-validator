@@ -3,7 +3,18 @@ import { Shardus, ShardusTypes } from '@shardus/core'
 import * as config from '../config'
 import { Utils } from '@shardus/types'
 import create from '../accounts'
-import { Accounts, UserAccount, NetworkAccount, DeveloperPayment, NodeAccount, OurAppDefinedData, WrappedStates, Tx, TransactionKeys } from '../@types'
+import {
+  Accounts,
+  UserAccount,
+  NetworkAccount,
+  DeveloperPayment,
+  NodeAccount,
+  OurAppDefinedData,
+  WrappedStates,
+  Tx,
+  TransactionKeys,
+  AppReceiptData,
+} from '../@types'
 
 export const validate_fields = (tx: Tx.DevPayment, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.from !== 'string') {
@@ -55,7 +66,7 @@ export const validate_fields = (tx: Tx.DevPayment, response: ShardusTypes.Incomi
 }
 
 export const validate = (tx: Tx.DevPayment, wrappedStates: WrappedStates, response: ShardusTypes.IncomingTransactionResult, dapp: Shardus) => {
-  const from: Accounts = wrappedStates[tx.from] && wrappedStates[tx.from].data
+  const from: UserAccount = wrappedStates[tx.from] && wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const developer: UserAccount = wrappedStates[tx.developer] && wrappedStates[tx.developer].data
   // let nodeInfo
@@ -97,7 +108,14 @@ export const validate = (tx: Tx.DevPayment, wrappedStates: WrappedStates, respon
   return response
 }
 
-export const apply = (tx: Tx.DevPayment, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp, applyResponse: ShardusTypes.ApplyResponse) => {
+export const apply = (
+  tx: Tx.DevPayment,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: NodeAccount = wrappedStates[tx.from].data
 
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
@@ -107,7 +125,7 @@ export const apply = (tx: Tx.DevPayment, txTimestamp: number, txId: string, wrap
   // developer.data.transactions.push({ ...tx, txId })
 
   const when = txTimestamp + config.ONE_SECOND * 10
-  let value = {
+  const value = {
     type: 'apply_developer_payment',
     timestamp: when,
     network: config.networkAccount,
@@ -121,6 +139,18 @@ export const apply = (tx: Tx.DevPayment, txTimestamp: number, txId: string, wrap
 
   developer.timestamp = txTimestamp
   from.timestamp = txTimestamp
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.developer,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
+
   dapp.log('Applied developer_payment tx', from, developer, tx.payment)
 }
 

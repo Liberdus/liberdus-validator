@@ -2,7 +2,7 @@ import * as crypto from '../crypto'
 import { Shardus, ShardusTypes } from '@shardus/core'
 import create from '../accounts'
 import * as config from '../config'
-import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys, AppReceiptData } from '../@types'
 
 export const validate_fields = (tx: Tx.RemoveStake, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.from !== 'string') {
@@ -50,10 +50,20 @@ export const validate = (tx: Tx.RemoveStake, wrappedStates: WrappedStates, respo
   return response
 }
 
-export const apply = (tx: Tx.RemoveStake, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.RemoveStake,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from: UserAccount = wrappedStates[tx.from].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const shouldRemoveState = from.data.remove_stake_request && from.data.remove_stake_request + 2 * network.current.nodeRewardInterval <= Date.now()
+  const stakeRemovalStatus = shouldRemoveState
+    ? 'Applied remove_stake tx'
+    : 'Cancelled remove_stake tx because `remove_stake_request` is null or earlier than 2 * nodeRewardInterval'
   if (shouldRemoveState) {
     from.data.balance += network.current.stakeRequiredUsd
     from.data.stake = BigInt(0)
@@ -62,8 +72,22 @@ export const apply = (tx: Tx.RemoveStake, txTimestamp: number, txId: string, wra
     // from.data.transactions.push({ ...tx, txId })
     dapp.log('Applied remove_stake tx', from)
   } else {
-    dapp.log('Cancelled remove_stake tx because `remove_stake_request` is null or earlier than 2 * nodeRewardInterval', from)
+    dapp.log(stakeRemovalStatus, from)
   }
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.from,
+    type: tx.type,
+    transactionFee: BigInt(0),
+    additionalInfo: {
+      stakeRemovalStatus,
+    },
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied remove_stake tx marked as requested', from)
 }
 

@@ -4,7 +4,7 @@ import * as utils from './../../utils'
 import * as config from './../../config'
 import * as AccountsStorage from '../../storage/accountStorage'
 import create from './../../accounts'
-import { UserAccount, WrappedStates, Tx, TransactionKeys, NodeAccount, Accounts } from './../../@types'
+import { UserAccount, WrappedStates, Tx, TransactionKeys, NodeAccount, Accounts, AppReceiptData } from './../../@types'
 
 export const validate_fields = (tx: Tx.DepositStake, response: ShardusTypes.IncomingTransactionResult) => {
   if (typeof tx.nominator !== 'string' && utils.isValidAddress(tx.nominator) === false) {
@@ -81,7 +81,14 @@ export const validate = (tx: Tx.DepositStake, wrappedStates: WrappedStates, resp
   return response
 }
 
-export const apply = (tx: Tx.DepositStake, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus) => {
+export const apply = (
+  tx: Tx.DepositStake,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const nominatorAccount: UserAccount = wrappedStates[tx.nominator].data
   const nodeAccount: NodeAccount = wrappedStates[tx.nominee] && wrappedStates[tx.nominee].data
   if (nominatorAccount.operatorAccountInfo == null) {
@@ -103,9 +110,8 @@ export const apply = (tx: Tx.DepositStake, txTimestamp: number, txId: string, wr
   const txFeeUsd = AccountsStorage.cachedNetworkAccount.current.transactionFee
   const txFee = utils.scaleByStabilityFactor(txFeeUsd, AccountsStorage.cachedNetworkAccount)
   // [TODO] check if the maintainance fee is also needed in deposit_stake tx
-  const maintenanceFeeUsd = utils.maintenanceAmount(txTimestamp, nominatorAccount, AccountsStorage.cachedNetworkAccount)
-  console.log('maintenanceFeeUsd', maintenanceFeeUsd)
-  const totalAmountToDeduct = tx.stake + txFee + maintenanceFeeUsd
+  const maintenanceFee = utils.maintenanceAmount(txTimestamp, nominatorAccount, AccountsStorage.cachedNetworkAccount)
+  const totalAmountToDeduct = tx.stake + txFee + maintenanceFee
   if (nominatorAccount.data.balance < totalAmountToDeduct) {
     throw new Error('Nominator account does not have enough balance to stake')
   }
@@ -122,6 +128,23 @@ export const apply = (tx: Tx.DepositStake, txTimestamp: number, txId: string, wr
   nominatorAccount.timestamp = txTimestamp
   nodeAccount.timestamp = txTimestamp
   // nominator.data.transactions.push({ ...tx, txId })
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.nominator,
+    to: tx.nominee,
+    type: tx.type,
+    transactionFee: txFee,
+    additionalInfo: {
+      maintenanceFee,
+      totalStake: nodeAccount.stakeLock,
+    },
+  }
+
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
+
   dapp.log('Applied deposit_stake tx', nominatorAccount, nodeAccount)
 }
 

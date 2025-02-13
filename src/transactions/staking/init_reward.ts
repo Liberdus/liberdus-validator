@@ -1,7 +1,7 @@
 import { nestedCountersInstance, Shardus, ShardusTypes } from '@shardus/core'
 import * as crypto from '../../crypto'
 import { LiberdusFlags } from '../../config'
-import { Tx, NodeAccount, WrappedStates, TransactionKeys } from '../../@types'
+import { Tx, NodeAccount, WrappedStates, TransactionKeys, AppReceiptData } from '../../@types'
 import * as AccountsStorage from '../../storage/accountStorage'
 import { _sleep, generateTxId } from '../../utils'
 import { TXTypes } from '..'
@@ -120,14 +120,32 @@ export const validate = (tx: Tx.InitRewardTX, wrappedStates: WrappedStates, resp
   return response
 }
 
-export function apply(tx: Tx.InitRewardTX, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus): void {
+export const apply = (
+  tx: Tx.InitRewardTX,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const nodeAccount = wrappedStates[tx.nominee].data as NodeAccount
   const network = AccountsStorage.cachedNetworkAccount
   nodeAccount.rewardStartTime = tx.nodeActivatedTime
   nodeAccount.rewardEndTime = 0
   nodeAccount.timestamp = txTimestamp
   nodeAccount.rewardRate = network ? network.current.nodeRewardAmountUsd : BigInt(0)
-  nodeAccount.rewarded = false
+
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.nominee,
+    to: nodeAccount.nominator,
+    type: tx.type,
+    transactionFee: BigInt(0),
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
+
   nestedCountersInstance.countEvent('liberdus-staking', `Applied InitRewardTX`)
   dapp.log('Applied InitRewardTX for', tx.nominee)
 }

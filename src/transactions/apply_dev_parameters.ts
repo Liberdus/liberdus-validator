@@ -2,7 +2,6 @@ import _ from 'lodash'
 import { Shardus, ShardusTypes } from '@shardus/core'
 import * as config from '../config'
 import * as crypto from '../crypto'
-import create from '../accounts'
 import { Utils } from '@shardus/types'
 import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
 

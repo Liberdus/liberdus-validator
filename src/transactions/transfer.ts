@@ -3,7 +3,18 @@ import { Shardus, ShardusTypes } from '@shardus/core'
 import * as utils from '../utils'
 import * as config from '../config'
 import create from '../accounts'
-import { Accounts, UserAccount, ChatAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import {
+  Accounts,
+  UserAccount,
+  ChatAccount,
+  NetworkAccount,
+  IssueAccount,
+  WrappedStates,
+  ProposalAccount,
+  Tx,
+  TransactionKeys,
+  AppReceiptData,
+} from '../@types'
 import { toShardusAddress, toShardusAddressWithKey } from '../utils/address'
 
 export const validate_fields = (tx: Tx.Transfer, response: ShardusTypes.IncomingTransactionResult) => {
@@ -80,15 +91,24 @@ export const validate = (tx: Tx.Transfer, wrappedStates: WrappedStates, response
   return response
 }
 
-export const apply = (tx: Tx.Transfer, txTimestamp: number, txId: string, wrappedStates: WrappedStates, dapp: Shardus, applyResponse: any) => {
+export const apply = (
+  tx: Tx.Transfer,
+  txTimestamp: number,
+  txId: string,
+  wrappedStates: WrappedStates,
+  dapp: Shardus,
+  applyResponse: ShardusTypes.ApplyResponse,
+): void => {
   const from = wrappedStates[tx.from].data
   const to: UserAccount = wrappedStates[tx.to].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
   const chat = wrappedStates[tx.chatId].data
 
   // update balances
-  from.data.balance -= tx.amount + network.current.transactionFee
-  from.data.balance -= utils.maintenanceAmount(txTimestamp, from, network)
+  const transactionFee = network.current.transactionFee
+  const maintenanceFee = utils.maintenanceAmount(txTimestamp, from, network)
+  from.data.balance -= transactionFee + maintenanceFee
+  from.data.balance -= tx.amount
   to.data.balance += tx.amount
 
   // store transfer data in chat
@@ -111,8 +131,19 @@ export const apply = (tx: Tx.Transfer, txTimestamp: number, txId: string, wrappe
   to.timestamp = txTimestamp
   chat.timestamp = txTimestamp
 
-  const receipt = Object.assign({}, tx, { txId, success: true })
-  dapp.applyResponseAddReceiptData(applyResponse, receipt, txId)
+  const appReceiptData: AppReceiptData = {
+    txId,
+    timestamp: txTimestamp,
+    success: true,
+    from: tx.from,
+    to: tx.to,
+    type: tx.type,
+    transactionFee,
+    additionalInfo: {
+      maintenanceFee,
+    },
+  }
+  dapp.applyResponseAddReceiptData(applyResponse, appReceiptData, txId)
   dapp.log('Applied transfer tx', from, to)
 }
 
