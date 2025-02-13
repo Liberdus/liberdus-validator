@@ -2,16 +2,17 @@ import * as crypto from '../crypto'
 import { Shardus, ShardusTypes } from '@shardus/core'
 import * as utils from '../utils'
 import * as config from '../config'
-import { Accounts, UserAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
+import create from '../accounts'
+import { Accounts, UserAccount, ChatAccount, NetworkAccount, IssueAccount, WrappedStates, ProposalAccount, Tx, TransactionKeys } from '../@types'
 import { toShardusAddress, toShardusAddressWithKey } from '../utils/address'
 
 export const validate_fields = (tx: Tx.Transfer, response: ShardusTypes.IncomingTransactionResult) => {
-  if (typeof tx.from !== 'string') {
+  if (typeof tx.from !== 'string' && utils.isValidAddress(tx.from) === false) {
     response.success = false
     response.reason = 'tx "from" field must be a string.'
     throw new Error(response.reason)
   }
-  if (typeof tx.to !== 'string') {
+  if (typeof tx.to !== 'string' && utils.isValidAddress(tx.to) === false) {
     response.success = false
     response.reason = 'tx "to" field must be a string.'
     throw new Error(response.reason)
@@ -19,6 +20,16 @@ export const validate_fields = (tx: Tx.Transfer, response: ShardusTypes.Incoming
   if (typeof tx.amount !== 'bigint' || tx.amount <= BigInt(0)) {
     response.success = false
     response.reason = 'tx "amount" field must be a bigint and greater than 0.'
+    throw new Error(response.reason)
+  }
+  if (typeof tx.chatId !== 'string' && utils.isValidAddress(tx.chatId) === false) {
+    response.success = false
+    response.reason = 'tx "chatId" field must be a valid address string.'
+    throw new Error(response.reason)
+  }
+  if (tx.chatId !== utils.calculateChatId(tx.from, tx.to)) {
+    response.success = false
+    response.reason = 'chatId is not calculated correctly for from and to addresses'
     throw new Error(response.reason)
   }
   if (tx.memo && typeof tx.memo !== 'string') {
@@ -73,11 +84,32 @@ export const apply = (tx: Tx.Transfer, txTimestamp: number, txId: string, wrappe
   const from = wrappedStates[tx.from].data
   const to: UserAccount = wrappedStates[tx.to].data
   const network: NetworkAccount = wrappedStates[config.networkAccount].data
+  const chat = wrappedStates[tx.chatId].data
+
+  // update balances
   from.data.balance -= tx.amount + network.current.transactionFee
   from.data.balance -= utils.maintenanceAmount(txTimestamp, from, network)
   to.data.balance += tx.amount
+
+  // store transfer data in chat
+  if (!from.data.chats[tx.to]) {
+    from.data.chats[tx.to] = {
+      receivedTimestamp: 0,
+      chatId: tx.chatId,
+    }
+  }
+  from.data.chatTimestamp = txTimestamp
+  to.data.chats[tx.from] = {
+    receivedTimestamp: txTimestamp,
+    chatId: tx.chatId,
+  }
+  to.data.chatTimestamp = txTimestamp
+  chat.messages.push(tx)
+
+  // update account timestamps
   from.timestamp = txTimestamp
   to.timestamp = txTimestamp
+  chat.timestamp = txTimestamp
 
   const receipt = Object.assign({}, tx, { txId, success: true })
   dapp.applyResponseAddReceiptData(applyResponse, receipt, txId)
@@ -107,7 +139,7 @@ export const transactionReceiptPass = (tx: Tx.Transfer, txId: string, wrappedSta
 }
 
 export const keys = (tx: Tx.Transfer, result: TransactionKeys) => {
-  result.sourceKeys = [tx.from]
+  result.sourceKeys = [tx.chatId, tx.from]
   result.targetKeys = [tx.to, config.networkAccount]
   result.allKeys = [...result.sourceKeys, ...result.targetKeys]
   return result
@@ -115,7 +147,7 @@ export const keys = (tx: Tx.Transfer, result: TransactionKeys) => {
 
 export const memoryPattern = (tx: Tx.Transfer, result: TransactionKeys): ShardusTypes.ShardusMemoryPatternsInput => {
   const memoryPattern: ShardusTypes.ShardusMemoryPatternsInput = {
-    rw: [tx.from, tx.to],
+    rw: [tx.from, tx.to, tx.chatId],
     wo: [],
     on: [],
     ri: [],
@@ -123,9 +155,14 @@ export const memoryPattern = (tx: Tx.Transfer, result: TransactionKeys): Shardus
   }
   return memoryPattern
 }
-export const createRelevantAccount = (dapp: Shardus, account: UserAccount, accountId: string, tx: Tx.Transfer, accountCreated = false) => {
+export const createRelevantAccount = (dapp: Shardus, account: UserAccount | ChatAccount, accountId: string, tx: Tx.Transfer, accountCreated = false) => {
   if (!account) {
-    throw Error('Account must exist in order to send a transfer transaction')
+    if (accountId === tx.chatId) {
+      account = create.chatAccount(accountId)
+    } else {
+      throw Error('Account must exist in order to send a message transaction')
+    }
+    accountCreated = true
   }
   return dapp.createWrappedResponse(accountId, accountCreated, account.hash, account.timestamp, account)
 }

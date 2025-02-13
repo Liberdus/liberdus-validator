@@ -23,6 +23,7 @@ export const serializeChatAccount = (stream: VectorBufferStream, inp: ChatAccoun
   
   stream.writeString(inp.id)
   stream.writeString(inp.type)
+  // [] Might have to update the serialization used for messages as it has updated to an array of object ( TxMessage )
   stream.writeString(Utils.safeStringify(inp.messages))
   stream.writeBigUInt64(BigInt(inp.timestamp))
   stream.writeString(inp.hash)

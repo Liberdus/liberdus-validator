@@ -351,6 +351,10 @@ export function getAccountType(data) {
   return 'undetermined'
 }
 
+export function calculateChatId(from: string, to: string): string {
+  return crypto.hash([from, to].sort((a, b) => a.localeCompare(b)).join(''))
+}
+
 export function getInjectedOrGeneratedTimestamp(timestampedTx: any, dapp: Shardus) {
   let { tx, timestampReceipt } = timestampedTx
   let txnTimestamp: number

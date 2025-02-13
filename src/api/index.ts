@@ -39,11 +39,12 @@ export default (dapp: Shardus) => {
   dapp.registerExternalGet('account/:id/:friendId/toll', accounts.tollOfFriend(dapp))
   dapp.registerExternalGet('account/:id/friends', accounts.friends(dapp))
   dapp.registerExternalGet('account/:id/recentMessages', accounts.recentMessages(dapp))
+  dapp.registerExternalGet('account/:id/chats/:timestamp', accounts.chats(dapp))
   // dapp.registerExternalGet('accounts', accounts.all(dapp))
 
   dapp.registerExternalGet('transaction/:id', accounts.transactions(dapp))
 
-  dapp.registerExternalGet('messages/:chatId', messages(dapp))
+  dapp.registerExternalGet('messages/:chatId/:timestamp', messages(dapp))
 
   dapp.registerExternalGet('debug/dump', debug.dump(dapp))
   dapp.registerExternalPost('debug/exit', debug.exit)

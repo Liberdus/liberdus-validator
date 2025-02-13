@@ -902,6 +902,7 @@ vorpal.command('transfer', 'transfers tokens to another account').action(async f
     from: USER.address,
     to,
     amount: amountInWei,
+    chatId: crypto.hash([USER.address, to].sort((a, b) => a < b).join``),
     memo: answers.memo ? answers.memo : null,
     timestamp: Date.now(),
   }

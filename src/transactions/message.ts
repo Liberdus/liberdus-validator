@@ -7,19 +7,24 @@ import { Accounts, UserAccount, NetworkAccount, ChatAccount, WrappedStates, Prop
 import { toShardusAddress } from '../utils/address'
 
 export const validate_fields = (tx: Tx.Message, response: ShardusTypes.IncomingTransactionResult) => {
-  if (typeof tx.from !== 'string') {
+  if (typeof tx.from !== 'string' && utils.isValidAddress(tx.from) === false) {
     response.success = false
     response.reason = 'tx "from" field must be a string.'
     throw new Error(response.reason)
   }
-  if (typeof tx.to !== 'string') {
+  if (typeof tx.to !== 'string' && utils.isValidAddress(tx.to) === false) {
     response.success = false
     response.reason = 'tx "to" field must be a string.'
     throw new Error(response.reason)
   }
-  if (typeof tx.chatId !== 'string') {
+  if (typeof tx.chatId !== 'string' && utils.isValidAddress(tx.chatId) === false) {
     response.success = false
-    response.reason = 'tx "chatId" field must be a string.'
+    response.reason = 'tx "chatId" field must be a valid address string.'
+    throw new Error(response.reason)
+  }
+  if (tx.chatId !== utils.calculateChatId(tx.from, tx.to)) {
+    response.success = false
+    response.reason = 'chatId is not calculated correctly for from and to addresses'
     throw new Error(response.reason)
   }
   if (typeof tx.message !== 'string') {
@@ -103,10 +108,20 @@ export const apply = (tx: Tx.Message, txTimestamp: number, txId: string, wrapped
   }
   from.data.balance -= utils.maintenanceAmount(txTimestamp, from, network)
 
-  if (!from.data.chats[tx.to]) from.data.chats[tx.to] = tx.chatId
-  if (!to.data.chats[tx.from]) to.data.chats[tx.from] = tx.chatId
+  if (!from.data.chats[tx.to]) {
+    from.data.chats[tx.to] = {
+      receivedTimestamp: 0,
+      chatId: tx.chatId,
+    }
+  }
+  from.data.chatTimestamp = txTimestamp
+  to.data.chats[tx.from] = {
+    receivedTimestamp: txTimestamp,
+    chatId: tx.chatId,
+  }
+  to.data.chatTimestamp = txTimestamp
 
-  chat.messages.push(tx.message)
+  chat.messages.push(tx)
   // from.data.transactions.push({ ...tx, txId })
   // to.data.transactions.push({ ...tx, txId })
 
@@ -118,8 +133,8 @@ export const apply = (tx: Tx.Message, txTimestamp: number, txId: string, wrapped
 }
 
 export const keys = (tx: Tx.Message, result: TransactionKeys) => {
-  result.sourceKeys = [tx.from]
-  result.targetKeys = [tx.to, tx.chatId, config.networkAccount]
+  result.sourceKeys = [tx.chatId, tx.from]
+  result.targetKeys = [tx.to, config.networkAccount]
   result.allKeys = [...result.sourceKeys, ...result.targetKeys]
   return result
 }

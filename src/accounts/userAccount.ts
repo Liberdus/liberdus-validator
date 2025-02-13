@@ -14,6 +14,7 @@ export const userAccount = (accountId: string, timestamp: number) => {
       remove_stake_request: null,
       toll: null,
       chats: {},
+      chatTimestamp: 0,
       friends: {},
       payments: [],
     },
@@ -31,7 +32,7 @@ export const userAccount = (accountId: string, timestamp: number) => {
 }
 
 export const serializeUserAccount = (stream: VectorBufferStream, inp: UserAccount, root = false): void => {
-  if(root){
+  if (root) {
     stream.writeUInt16(SerdeTypeIdent.UserAccount)
   }
 
@@ -39,57 +40,53 @@ export const serializeUserAccount = (stream: VectorBufferStream, inp: UserAccoun
   stream.writeString(inp.type)
   stream.writeBigUInt64(inp.data.balance)
 
-
   stream.writeUInt8(inp.data.toll ? 1 : 0)
 
-  if(inp.data.toll){
+  if (inp.data.toll) {
     stream.writeBigInt64(inp.data.toll)
   }
   stream.writeUInt32(Object.keys(inp.data.chats).length)
-  for(const key in inp.data.chats){
+  for (const key in inp.data.chats) {
     stream.writeString(key)
-    stream.writeString(inp.data.chats[key])
+    const chatObject = inp.data.chats[key]
+    stream.writeUInt32(chatObject.receivedTimestamp)
+    stream.writeString(chatObject.chatId)
   }
-
+  stream.writeUInt32(inp.data.chatTimestamp)
 
   stream.writeUInt32(Object.keys(inp.data.friends).length)
-  for(const key in inp.data.friends){
+  for (const key in inp.data.friends) {
     stream.writeString(key)
     stream.writeString(inp.data.friends[key])
   }
 
-  if(inp.data.stake !== null){
+  if (inp.data.stake !== null) {
     stream.writeUInt8(1)
     stream.writeBigUInt64(inp.data.stake)
-  }else{
+  } else {
     stream.writeUInt8(0)
   }
 
-    
-  if(inp.data.remove_stake_request !== null){
+  if (inp.data.remove_stake_request !== null) {
     stream.writeUInt8(1)
     stream.writeUInt32(inp.data.remove_stake_request)
-  }else{
+  } else {
     stream.writeUInt8(0)
   }
 
-
-
   stream.writeUInt32(inp.data.payments.length)
-  for(let i = 0; i < inp.data.payments.length; i++){
+  for (let i = 0; i < inp.data.payments.length; i++) {
     serializeDeveloperPayment(stream, inp.data.payments[i])
   }
 
-
   stream.writeUInt8(inp.alias ? 1 : 0)
-  if(inp.alias){
+  if (inp.alias) {
     stream.writeString(inp.alias)
   }
   stream.writeUInt8(inp.emailHash ? 1 : 0)
-  if(inp.emailHash){
+  if (inp.emailHash) {
     stream.writeString(inp.emailHash)
   }
-
 
   stream.writeUInt8(inp.verified ? 1 : 0)
   stream.writeUInt32(inp.lastMaintenance)
@@ -100,87 +97,95 @@ export const serializeUserAccount = (stream: VectorBufferStream, inp: UserAccoun
 }
 
 export const deserializeUserAccount = (stream: VectorBufferStream, root = false): UserAccount => {
-  if (root && (stream.readUInt16() !== SerdeTypeIdent.UserAccount)) {
-    throw new Error("Unexpected type identifier for UserAccount type");
+  if (root && stream.readUInt16() !== SerdeTypeIdent.UserAccount) {
+    throw new Error('Unexpected type identifier for UserAccount type')
   }
 
-  const id = stream.readString();
-  const type = stream.readString();
+  const id = stream.readString()
+  const type = stream.readString()
 
   // Deserialize 'data'
-  const balance = stream.readBigUInt64();
+  const balance = stream.readBigUInt64()
 
   // Optional toll
-  let toll = null;
+  let toll = null
   if (stream.readUInt8() === 1) {
-    toll = stream.readBigInt64();
+    toll = stream.readBigInt64()
   }
 
   // Deserialize chats
-  const chats: Record<string, string> = {};
-  const chatCount = stream.readUInt32();
+  const chats = {} as UserAccount['data']['chats']
+  const chatCount = stream.readUInt32()
   for (let i = 0; i < chatCount; i++) {
-    const key = stream.readString();
-    const value = stream.readString();
-    chats[key] = value;
+    const key = stream.readString()
+    const receivedTimestamp = stream.readUInt32()
+    const chatId = stream.readString()
+    // eslint-disable-next-line security/detect-object-injection
+    chats[key] = {
+      receivedTimestamp,
+      chatId,
+    }
   }
 
+  // Deserialize chatTimestamp
+  const chatTimestamp = stream.readUInt32()
+
   // Deserialize friends
-  const friends: Record<string, string> = {};
-  const friendsCount = stream.readUInt32();
+  const friends: Record<string, string> = {}
+  const friendsCount = stream.readUInt32()
   for (let i = 0; i < friendsCount; i++) {
-    const key = stream.readString();
-    const value = stream.readString();
-    friends[key] = value;
+    const key = stream.readString()
+    const value = stream.readString()
+    friends[key] = value
   }
 
   // Optional stake
-  let stake = null;
+  let stake = null
   if (stream.readUInt8() === 1) {
-    stake = stream.readBigUInt64();
+    stake = stream.readBigUInt64()
   }
 
   // Optional remove_stake_request
-  let remove_stake_request = null;
+  let remove_stake_request = null
   if (stream.readUInt8() === 1) {
-    remove_stake_request = stream.readUInt32();
+    remove_stake_request = stream.readUInt32()
   }
 
   // Deserialize payments
-  const payments = [];
-  const paymentsLength = stream.readUInt32();
+  const payments = []
+  const paymentsLength = stream.readUInt32()
   for (let i = 0; i < paymentsLength; i++) {
-    payments.push(deserializeDeveloperPayment(stream));
+    payments.push(deserializeDeveloperPayment(stream))
   }
 
   // Optional alias
-  let alias = null;
+  let alias = null
   if (stream.readUInt8() === 1) {
-    alias = stream.readString();
+    alias = stream.readString()
   }
 
   // Optional emailHash
-  let emailHash = null;
+  let emailHash = null
   if (stream.readUInt8() === 1) {
-    emailHash = stream.readString();
+    emailHash = stream.readString()
   }
 
   // Deserialize verified flag
-  const verified = stream.readUInt8() === 1;
+  const verified = stream.readUInt8() === 1
 
   // Deserialize lastMaintenance
-  const lastMaintenance = stream.readUInt32();
+  const lastMaintenance = stream.readUInt32()
 
   // Deserialize claimedSnapshot
-  const claimedSnapshot = stream.readUInt8() === 1;
+  const claimedSnapshot = stream.readUInt8() === 1
 
   // Deserialize timestamp
-  const timestamp = stream.readUInt32();
+  const timestamp = stream.readUInt32()
 
   // Deserialize hash
-  const hash = stream.readString();
+  const hash = stream.readString()
 
-  const publicKey = stream.readString();
+  const publicKey = stream.readString()
 
   return {
     id,
@@ -191,6 +196,7 @@ export const deserializeUserAccount = (stream: VectorBufferStream, root = false)
       remove_stake_request,
       toll,
       chats,
+      chatTimestamp,
       friends,
       payments,
     },
@@ -202,7 +208,5 @@ export const deserializeUserAccount = (stream: VectorBufferStream, root = false)
     lastMaintenance,
     timestamp,
     publicKey,
-  };
-};
-
-
+  }
+}
